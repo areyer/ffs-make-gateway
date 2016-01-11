@@ -45,7 +45,9 @@ fi
 ensureline() {
 	LINE="$1"
 	FILE="$2"
-	[ ! -e "$FILE" ] && touch "$FILE" || return 1
+	if [ ! -e "$FILE" ]; then
+		touch "$FILE" || return 1
+	fi
 	egrep '^'"$LINE"'$' "$FILE" || echo "$LINE" >> "$FILE" || return 1
 }
 

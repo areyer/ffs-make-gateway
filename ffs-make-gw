@@ -13,19 +13,23 @@ for now supports Debian jessie with systemd
 EOF
 }
 NEEDS_SYSTEMD=1
+NEEDS_APTUPDATE=1
+NEEDS_APTKEY=1
 error() {
   print_help
   echo "$*"
   exit 1
 }
-TEMP=`getopt -o h --long help,name:,ip:,no-systemd -- "$@"`
+TEMP=`getopt -o h --long help,name:,ip:,no-systemd,no-apt-update,no-apt-key -- "$@"`
 if [ $? != 0 ] ; then print_help >&2 ; exit 1 ; fi
 eval set -- "$TEMP"
 while true ; do
   case "$1" in
     --name)    GWNAME=$2; shift 2;;
     --ip)      IP=$2; shift 2;;
-		--no-systemd)	NEEDS_SYSTEMD=0;;
+    --no-systemd)	NEEDS_SYSTEMD=0; shift 1;;
+    --no-apt-update)	NEEDS_APTUPDATE=0; shift 1;;
+    --no-apt-key)	NEEDS_APTKEY=0; shift 1;;
     --help|-h) print_help; exit 1;;
     --) shift ; break ;;
     *) echo "Unknown parameter $1, try -h" ; exit 1 ;;
@@ -48,13 +52,81 @@ ensureline() {
 	if [ ! -e "$FILE" ]; then
 		touch "$FILE" || return 1
 	fi
-	egrep '^'"$LINE"'$' "$FILE" || echo "$LINE" >> "$FILE" || return 1
+	egrep -q '^'"$LINE"'$' "$FILE" || echo "$LINE" >> "$FILE" || return 1
 }
 
 ensureline "deb http://ppa.launchpad.net/freifunk-mwu/freifunk-ppa/ubuntu trusty main" /etc/apt/sources.list.d/freifunk.list
+ensureline "deb-src http://ppa.launchpad.net/freifunk-mwu/freifunk-ppa/ubuntu trusty main" /etc/apt/sources.list.d/freifunk.list
 ensureline "deb http://repo.universe-factory.net/debian/ sid main" /etc/apt/sources.list.d/freifunk.list
-apt-key adv --keyserver keyserver.ubuntu.com --recv 16EF3F64CB201D9C
-apt-get update
-aptitude install bind9 build-essential bridge-utils git batctl fastd alfred alfred-json batadv-vis openvpn tinc vnstat vnstati
+
+cat <<'EOF' >/etc/apt/preferences.d/alfred
+Package: alfred
+Pin:  release n=jessie-backports
+Pin-Priority:  500
+EOF
+
+if [ x"$NEEDS_APTKEY" == x1 ]; then
+  apt-key adv --keyserver keyserver.ubuntu.com --recv 16EF3F64CB201D9C
+  apt-key adv --keyserver keyserver.ubuntu.com --recv B976BD29286CC7A4
+fi
+if [ x"$NEEDS_APTUPDATE" == x1 ]; then
+  apt-get update
+fi
+
+# batman-adv-dkms haengt von linux-headers-generic ab, das gibt es auf Debian nicht
+if ! dpkg -l equivs >/dev/null 2>&1; then
+  apt-get install equivs
+fi
+if ! dpkg -l linux-headers-generic | grep -qw $(uname -r); then
+  TMPDIR=$(mktemp -d)
+  equivs-control $TMPDIR/linux-headers-generic
+  sed -i '
+    s/^Package:.*/Package: linux-headers-generic/
+    s/^# Version:.*/Version: '"$(uname -r)"'/
+    /^Description/,$d
+  ' $TMPDIR/linux-headers-generic
+  cat <<EOF >>$TMPDIR/linux-headers-generic
+Description: linux-headers-generic translation package
+ linux-headers-generic translation package for batman-adv-dkms
+EOF
+  equivs-build $TMPDIR/linux-headers-generic
+  dpkg -i linux-headers-generic_$(uname -r)_all.deb
+  rm -rf "$TMPDIR"
+fi
+
+# batadv-vis ist nicht in backports
+apt-get -y install resolvconf bind9 build-essential bridge-utils batman-adv-dkms git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati
+
+cat <<EOF
+***********************************************************************
+FIXME: sauberes init-Skript in alfred-Paket bauen
+#***********************************************************************
+EOF
+
+if [ ! -e /etc/systemd/system/alfred@.service ]; then
+  cat <<'EOF' >/etc/systemd/system/alfred@.service
+[Unit]
+Description=A.L.F.R.E.D
+After=network.target
+ConditionPathExists=/usr/sbin/alfred
+
+[Service]
+EnvironmentFile=/etc/default/alfred
+ExecStart=/usr/sbin/alfred -u /var/run/alfred-%I.sock -i %I -b %I $DAEMON_OPTS
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+Alias=alfred.service
+EOF
+systemctl daemon-reload
+fi
+cat <<EOF >/etc/sysctl.d/999-freifunk.conf
+net.ipv4.ip_forward=1
+net.ipv6.conf.all.forwarding=1
+EOF
+sysctl -p /etc/sysctl.d/999-freifunk.conf
 
 # vim: ts=2 sw=2 sts=2 sr noet

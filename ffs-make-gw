@@ -1,0 +1,58 @@
+#!/bin/bash
+# Referenz: https://wiki.freifunk-stuttgart.net/technik:gateways:gateway-einrichten
+
+set -e
+
+print_help() {
+cat <<EOF >&2
+usage: $0
+converts an empty server into a Freifunk Stuttgart Gateway
+for now supports Debian jessie with systemd
+--help:             this screen
+--no-systemd:  don't insist on systemd
+EOF
+}
+NEEDS_SYSTEMD=1
+error() {
+  print_help
+  echo "$*"
+  exit 1
+}
+TEMP=`getopt -o h --long help,name:,ip:,no-systemd -- "$@"`
+if [ $? != 0 ] ; then print_help >&2 ; exit 1 ; fi
+eval set -- "$TEMP"
+while true ; do
+  case "$1" in
+    --name)    GWNAME=$2; shift 2;;
+    --ip)      IP=$2; shift 2;;
+		--no-systemd)	NEEDS_SYSTEMD=0;;
+    --help|-h) print_help; exit 1;;
+    --) shift ; break ;;
+    *) echo "Unknown parameter $1, try -h" ; exit 1 ;;
+  esac
+done
+
+if ! dpkg -S /sbin/init | awk -F: '$1 != "systemd-sysv" {exit 1}' && [ $NEEDS_SYSTEMD -eq 1 ]; then
+	echo "/sbin/init is not systemd-sysv" >&2
+	echo "use --no-systemd to overwrite" >&2
+	exit 1
+fi
+
+if [ ! -d /etc/apt/sources.list.d ]; then
+	mkdir -p /etc/apt/sources.list.d
+fi
+
+ensureline() {
+	LINE="$1"
+	FILE="$2"
+	[ ! -e "$FILE" ] && touch "$FILE" || return 1
+	egrep '^'"$LINE"'$' "$FILE" || echo "$LINE" >> "$FILE" || return 1
+}
+
+ensureline "deb http://ppa.launchpad.net/freifunk-mwu/freifunk-ppa/ubuntu trusty main" /etc/apt/sources.list.d/freifunk.list
+ensureline "deb http://repo.universe-factory.net/debian/ sid main" > /etc/apt/sources.list.d/freifunk.list
+apt-key adv --keyserver keyserver.ubuntu.com --recv 16EF3F64CB201D9C
+apt-get update
+aptitude install bind9 build-essential bridge-utils git batctl fastd alfred alfred-json batadv-vis openvpn tinc vnstat vnstati
+
+# vim: ts=2 sw=2 sts=2 sr noet

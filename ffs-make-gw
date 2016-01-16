@@ -5,28 +5,34 @@ set -e
 
 print_help() {
 cat <<EOF >&2
-usage: $0
+usage: $0 --gwid N
 converts an empty server into a Freifunk Stuttgart Gateway
 for now supports Debian jessie with systemd
---help:             this screen
---no-systemd:  don't insist on systemd
+--help:          this screen
+--gwid:          Gateway ID
+--no-systemd:    don't insist on systemd
+--no-apt-update: apt-get update nicht ausfuehren
+--no-apt-key:    keine neuen Keys hinzufuegen
 EOF
 }
 NEEDS_SYSTEMD=1
 NEEDS_APTUPDATE=1
 NEEDS_APTKEY=1
+VPNKEY="Wird generiert"
 error() {
   print_help
   echo "$*"
   exit 1
 }
-TEMP=`getopt -o h --long help,name:,ip:,no-systemd,no-apt-update,no-apt-key -- "$@"`
+TEMP=`getopt -o h --long help,name:,ip:,gwid:,vpnkey:,no-systemd,no-apt-update,no-apt-key -- "$@"`
 if [ $? != 0 ] ; then print_help >&2 ; exit 1 ; fi
 eval set -- "$TEMP"
 while true ; do
   case "$1" in
     --name)    GWNAME=$2; shift 2;;
     --ip)      IP=$2; shift 2;;
+    --gwid)      GWID=$2; shift 2;;
+    --vpnkey)    VPNKEY=$2; shift 2;;
     --no-systemd)	NEEDS_SYSTEMD=0; shift 1;;
     --no-apt-update)	NEEDS_APTUPDATE=0; shift 1;;
     --no-apt-key)	NEEDS_APTKEY=0; shift 1;;
@@ -35,6 +41,27 @@ while true ; do
     *) echo "Unknown parameter $1, try -h" ; exit 1 ;;
   esac
 done
+
+if [ x"$GWID" == "x" ]; then
+	echo "Keine GatewayID -> kein Gateway"
+	exit 1
+fi
+GWLID=$(printf "02i" $GWID)
+LEGIP=172.21.$((4*$GWID)).1
+EXT_IF_V4=$(ip r l table main | sed -n '/default/{s/^.*dev //; s/ .*//; p}')
+EXT_IP_V4=$(ip r l table main | sed -n '/dev '$EXT_IF_V4' .*src/{ s/^.* src // ;s/ .*//; p}')
+EXT_IF_V6=$(ip -6 r l table main | sed -n '/default/{s/^.*dev //; s/ .*//; p}')
+EXT_IPS_V6=$(ip -6 a l dev $EXT_IF_V6 | sed -n '/inet6/{s/.*inet6 //; s/\/.*//; /fe80/d; p}')
+cat <<EOF
+GatewayID (GWID): $GWID
+Gateway Long ID (GWLID): $GWLID
+Legacy Net IP (LEGIP): $LEGIP
+Externes Interface v4 (EXT_IF_V4): $EXT_IF_V4
+Externe IP v4 (EXT_IP_V4): $EXT_IP_V4
+Externes Interface v6 (EXT_IF_V6): $EXT_IF_V6
+Externe IPs v6 (EXT_IP_V6): $EXT_IP_V6
+fastd VPN Key: $VPNKEY
+EOF
 
 if ! dpkg -S /sbin/init | awk -F: '$1 != "systemd-sysv" {exit 1}' && [ $NEEDS_SYSTEMD -eq 1 ]; then
 	echo "/sbin/init is not systemd-sysv" >&2
@@ -112,7 +139,7 @@ ConditionPathExists=/usr/sbin/alfred
 
 [Service]
 EnvironmentFile=/etc/default/alfred
-ExecStart=/usr/sbin/alfred -u /var/run/alfred-%I.sock -i %I -b %I $DAEMON_OPTS
+ExecStart=/usr/sbin/alfred -u /var/run/alfred-%I.sock -i %I -b %I --master
 ExecReload=/bin/kill -HUP $MAINPID
 KillMode=process
 Restart=on-failure
@@ -135,4 +162,122 @@ ensureline "71	nodefault" /etc/iproute2/rt_tables
 ensureline "1000	othergw" /etc/iproute2/rt_tables
 ensureline "2000	direct" /etc/iproute2/rt_tables
 
+if [ ! -e /etc/systemd/system/fastd@.service ]; then
+  cat <<'EOF' >/etc/systemd/system/fastd@.service
+[Unit]
+Description=Fast and Secure Tunnelling Daemon (connection %I)
+After=network.target
+
+[Service]
+Type=notify
+ExecStartPre=/bin/mkdir -p /var/run/fastd
+ExecStartPre=/bin/chown fastd /var/run/fastd
+ExecStartPre=/bin/rm -f /var/run/fastd/fastd-%I.sock
+ExecStart=/usr/bin/fastd --syslog-level debug2 --syslog-ident fastd@%I -c /etc/fastd/%I/fastd.conf --pid-file /var/run/fastd/fastd-%I.pid --status-socket /var/run/fastd/fastd-%I.sock --user fastd
+ExecReload=/bin/kill -HUP $MAINPID
+
+[Install]
+WantedBy=multi-user.target
+EOF
+fi
+# Legacy Segment
+ensureline "source-directory interfaces.d" /etc/network/interfaces
+cat <<EOF >/etc/network/interfaces.d/ffs-seg00
+auto br00
+iface br00 inet static
+        bridge_ports none
+        bridge_fd 0
+        bridge_maxwait 0
+	bridge_hw	02:00:0a:38:00:$GWLID
+        address $LEGIP
+        netmask 255.255.192.0
+	broadcast 172.21.63.255
+        # be sure all incoming traffic is handled by the appropriate rt_table
+        post-up         /sbin/ip rule add iif \$IFACE table stuttgart priority 10000 || true
+        pre-down        /sbin/ip rule del iif \$IFACE table stuttgart priority 10000 || true
+        post-up         /sbin/ip rule add iif \$IFACE table nodefault priority 10001 || true
+        pre-down        /sbin/ip rule del iif \$IFACE table nodefault priority 10001 || true
+        # default route is unreachable
+        post-up         /sbin/ip route add 172.21.0.0/18 dev \$IFACE table stuttgart || true
+        post-up         /sbin/ip route add unreachable default table nodefault || true
+        post-down       /sbin/ip route del unreachable default table nodefault || true
+        post-down       /sbin/ip route del 172.21.0.0/18 dev \$IFACE table stuttgart || true
+ 
+iface br00 inet6 static
+        address fd21:b4dc:4b1e::a38:$GWLID
+        netmask 64
+        # ULA route mz for rt_table stuttgart
+        post-up         /sbin/ip -6 route add fd21:b4dc:4b1e::/64 proto static dev \$IFACE table stuttgart || true
+        post-down       /sbin/ip -6 route del fd21:b4dc:4b1e::/64 proto static dev \$IFACE table stuttgart || true
+
+allow-hotplug vpn00
+iface vpn00 inet6 manual
+        pre-up          ip link set \$IFACE address 02:00:0a:38:00:$GWLID up || true
+        post-up         /usr/sbin/batctl -m bat00 if add \$IFACE || true
+        post-up         /sbin/ip link set dev bat00 up || true
+
+allow-hotplug bat00
+iface bat00 inet6 manual
+        pre-up          /sbin/modprobe batman-adv
+        post-up         ip link set \$IFACE up || true
+        post-up         /sbin/brctl addif br00 \$IFACE || true
+        post-up         /usr/sbin/batctl -m \$IFACE it 10000 || true
+        post-up         /usr/sbin/batctl -m \$IFACE vm server || true
+        post-up         /usr/sbin/batctl -m \$IFACE gw server  50mbit/50mbit || true
+        pre-down        /sbin/brctl delif br00 \$IFACE || true
+EOF
+
+if [ ! -d /etc/fastd/ffs-vpn/peers/.git ]; then
+  mkdir -p /etc/fastd/ffs-vpn
+  git clone https://github.com/freifunk-stuttgart/peers-ffs /etc/fastd/ffs-vpn/peers
+fi
+for i in $(seq 0 4); do
+  VPNID=$(printf "%02i" $i)
+  if [ $i -eq 0 ]; then
+    VPNPORT=10037
+  else
+    VPNPORT=1004$i
+  fi
+  dir=/etc/fastd/vpn$VPNID
+  mkdir -p $dir
+  cat <<EOF >$dir/fastd.conf
+log to syslog level warn;
+interface "vpn$VPNID";
+method "salsa2012+gmac";    # new method, between gateways for the moment (faster)
+method "salsa2012+umac";  
+$(for a in $EXT_IP_V4; do echo bind $a:$VPNPORT\;; done)
+$(for a in $EXT_IPS_V6; do echo bind [$a]:$VPNPORT\;; done)
+
+include "/etc/fastd/ffs-vpn/secret.conf";
+mtu 1406; # 1492 - IPv4/IPv6 Header - fastd Header...
+on verify "/root/freifunk/unclaimed.py";
+status socket "/var/run/fastd-vpn$VPNID.sock";
+include peers from "/etc/fastd/ffs-vpn/peers/vpn$VPNID/peers";
+EOF
+done
+if [ "$VPNKEY" == "Wird generiert" ]; then
+  VPNKEY=$(fastd --generate-key --machine-readable)
+fi
+if [ ! -e /etc/fastd/ffs-vpn/secret.conf ]; then
+  cat <<EOF >/etc/fastd/ffs-vpn/secret.conf
+secret "$VPNKEY";
+EOF
+else
+  VPNKEY=$(sed -n '/secret/{ s/.* "//; s/".*//; p}' /etc/fastd/ffs-vpn/secret.conf)
+fi
+OLDDIR=$(pwd)
+cd /root
+if [ ! -d /root/git/FfsConfigGenerator ]; then
+  mkdir -p /root/git
+  git clone https://github.com/freifunk-stuttgart/FfsConfigGenerator.git
+  cd FfsConfigGenerator
+else
+  cd /root/git/FfsConfigGenerator
+  git pull
+fi
+./gen_config.py --gwnum $GWID
+rsync --dry-run -rlHpogDtvx --exclude etc/fastd etc /
+cd "$OLDPWD"
+
+echo "fastd Public Key: $(fastd -c /etc/fastd/ffs-vpn/secret.conf --show-key --machine-readable)"
 # vim: ts=2 sw=2 sts=2 sr noet

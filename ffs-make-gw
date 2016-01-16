@@ -129,4 +129,10 @@ net.ipv6.conf.all.forwarding=1
 EOF
 sysctl -p /etc/sysctl.d/999-freifunk.conf
 
+ensureline "42	icvpn" /etc/iproute2/rt_tables
+ensureline "70	stuttgart" /etc/iproute2/rt_tables
+ensureline "71	nodefault" /etc/iproute2/rt_tables
+ensureline "1000	othergw" /etc/iproute2/rt_tables
+ensureline "2000	direct" /etc/iproute2/rt_tables
+
 # vim: ts=2 sw=2 sts=2 sr noet

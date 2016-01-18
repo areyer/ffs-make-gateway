@@ -5,19 +5,21 @@ set -e
 
 print_help() {
 cat <<EOF >&2
-usage: $0 --gwid N
-converts an empty server into a Freifunk Stuttgart Gateway
-for now supports Debian jessie with systemd
---help:          this screen
---gwid:          Gateway ID
---no-systemd:    don't insist on systemd
+usage: $0 --gwid N [--vpnkey=xxxx] [--no-systemd] [--no-apt-update]
+Verwandelt einen Debian Jessie Server mit systemd in ein Freifunk-GW
+--help:          Dieser Text
+--gwid:          Gateway ID (1-10)
+--vpnkey:        use this fastd private key (string)
+--with-lihas-firewall: Installiere LiHAS Firewall fuer policy routing
+--no-systemd:    Nicht aufd systemd bestehen, dann muss man alles int-Zeugs von hand machen
 --no-apt-update: apt-get update nicht ausfuehren
---no-apt-key:    keine neuen Keys hinzufuegen
+--no-apt-key:    keine neuen APT-Keys hinzufuegen
 EOF
 }
 NEEDS_SYSTEMD=1
 NEEDS_APTUPDATE=1
 NEEDS_APTKEY=1
+OPT_FWLIHAS=0
 VPNKEY="Wird generiert"
 error() {
   print_help
@@ -33,6 +35,7 @@ while true ; do
     --ip)      IP=$2; shift 2;;
     --gwid)      GWID=$2; shift 2;;
     --vpnkey)    VPNKEY=$2; shift 2;;
+    --with-lihas-firewall) OPT_FWLIHAS=1; shift 1;;
     --no-systemd)	NEEDS_SYSTEMD=0; shift 1;;
     --no-apt-update)	NEEDS_APTUPDATE=0; shift 1;;
     --no-apt-key)	NEEDS_APTKEY=0; shift 1;;
@@ -46,7 +49,7 @@ if [ x"$GWID" == "x" ]; then
 	echo "Keine GatewayID -> kein Gateway"
 	exit 1
 fi
-GWLID=$(printf "02i" $GWID)
+GWLID=$(printf "%02i" $GWID)
 LEGIP=172.21.$((4*$GWID)).1
 EXT_IF_V4=$(ip r l table main | sed -n '/default/{s/^.*dev //; s/ .*//; p}')
 EXT_IP_V4=$(ip r l table main | sed -n '/dev '$EXT_IF_V4' .*src/{ s/^.* src // ;s/ .*//; p}')
@@ -85,6 +88,9 @@ ensureline() {
 ensureline "deb http://ppa.launchpad.net/freifunk-mwu/freifunk-ppa/ubuntu trusty main" /etc/apt/sources.list.d/freifunk.list
 ensureline "deb-src http://ppa.launchpad.net/freifunk-mwu/freifunk-ppa/ubuntu trusty main" /etc/apt/sources.list.d/freifunk.list
 ensureline "deb http://repo.universe-factory.net/debian/ sid main" /etc/apt/sources.list.d/freifunk.list
+if [ "x$OPT_FWLIHAS" == "x1" ]; then
+  ensureline "deb http://ftp.lihas.de/debian/ stable main" /etc/apt/sources.list.d/lihas.list
+fi
 
 cat <<'EOF' >/etc/apt/preferences.d/alfred
 Package: alfred
@@ -95,6 +101,9 @@ EOF
 if [ x"$NEEDS_APTKEY" == x1 ]; then
   apt-key adv --keyserver keyserver.ubuntu.com --recv 16EF3F64CB201D9C
   apt-key adv --keyserver keyserver.ubuntu.com --recv B976BD29286CC7A4
+  if [ "x$OPT_FWLIHAS" == "x1" ]; then
+    wget -O - http://ftp.lihas.de/debian/apt-key-lihas.gpg | apt-key add -
+  fi
 fi
 if [ x"$NEEDS_APTUPDATE" == x1 ]; then
   apt-get update
@@ -122,7 +131,7 @@ EOF
 fi
 
 # batadv-vis ist nicht in backports
-apt-get -y install resolvconf bind9 build-essential bridge-utils batman-adv-dkms git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati
+apt-get -y install resolvconf bind9 build-essential bridge-utils batman-adv-dkms git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas)
 
 cat <<EOF
 ***********************************************************************
@@ -266,18 +275,50 @@ else
   VPNKEY=$(sed -n '/secret/{ s/.* "//; s/".*//; p}' /etc/fastd/ffs-vpn/secret.conf)
 fi
 OLDDIR=$(pwd)
-cd /root
+mkdir -p /root/git
+cd /root/git
+
+
 if [ ! -d /root/git/FfsConfigGenerator ]; then
-  mkdir -p /root/git
+  pip2 install --upgrade netaddr
   git clone https://github.com/freifunk-stuttgart/FfsConfigGenerator.git
   cd FfsConfigGenerator
 else
   cd /root/git/FfsConfigGenerator
   git pull
 fi
+python -c '
+import json, sys
+fp = open("config.json","rb")
+config = json.load(fp)
+fp.close()
+if ( "10" not in config["gws"] ):
+  fp = open("config.json","wb")
+  config["gws"]["10"] = {}
+  config["gws"]["10"]["legacyipv4"] = "'$LEGIP'"
+  config["gws"]["10"]["legacyipv6"] = "fd21:b4dc:4b1e::a38:'$GWLID'"
+  config["gws"]["10"]["externalipv4"] = "'$EXT_IP_V4'"
+  config["gws"]["10"]["externalipv6"] = "'$EXT_IPS_V6'"
+  config["gws"]["10"]["ipv4start"] = "172.21.'$((4*$GWID))'.2"
+  config["gws"]["10"]["ipv4end"] = "172.21.'$((4*$((GWID+1))-1))'.254"
+  json.dump(config, fp, indent=2)
+  fp.close()
+'
 ./gen_config.py --gwnum $GWID
-rsync --dry-run -rlHpogDtvx --exclude etc/fastd etc /
+rsync -rlHpogDtvx --exclude etc/fastd etc /
 cd "$OLDPWD"
+systemctl daemon-reload
+systemctl enable fastd@vpn00.service 
+systemctl enable fastd@vpn01.service 
+systemctl enable fastd@vpn02.service 
+systemctl enable fastd@vpn03.service 
+systemctl enable fastd@vpn04.service 
+systemctl enable alfred@bat00.service 
+systemctl enable alfred@bat01.service 
+systemctl enable alfred@bat02.service 
+systemctl enable alfred@bat03.service 
+systemctl enable alfred@bat04.service 
+
 
 echo "fastd Public Key: $(fastd -c /etc/fastd/ffs-vpn/secret.conf --show-key --machine-readable)"
 # vim: ts=2 sw=2 sts=2 sr noet

@@ -273,10 +273,12 @@ status socket "/var/run/fastd-vpn$VPNID.sock";
 include peers from "/etc/fastd/ffs-vpn/peers/vpn$VPNID/peers";
 EOF
 done
-if [ "$VPNKEY" == "Wird generiert" ]; then
+if [ "$VPNKEY" == "Wird generiert" ] && [ ! -e /etc/fastd/ffs-vpn/secret.conf ]; then
   VPNKEY=$(fastd --generate-key --machine-readable)
-fi
-if [ ! -e /etc/fastd/ffs-vpn/secret.conf ]; then
+  cat <<EOF >/etc/fastd/ffs-vpn/secret.conf
+secret "$VPNKEY";
+EOF
+elif [ "$VPNKEY" != "Wird generiert" ]; then
   cat <<EOF >/etc/fastd/ffs-vpn/secret.conf
 secret "$VPNKEY";
 EOF
@@ -298,18 +300,19 @@ else
 fi
 python -c '
 import json, sys
+GWID='$GWID'
 fp = open("config.json","rb")
 config = json.load(fp)
 fp.close()
-if ( "10" not in config["gws"] ):
+if ( "$GWID" not in config["gws"] ):
   fp = open("config.json","wb")
-  config["gws"]["10"] = {}
-  config["gws"]["10"]["legacyipv4"] = "'$LEGIP'"
-  config["gws"]["10"]["legacyipv6"] = "fd21:b4dc:4b1e::a38:'$GWLID'"
-  config["gws"]["10"]["externalipv4"] = "'$EXT_IP_V4'"
-  config["gws"]["10"]["externalipv6"] = "'$EXT_IPS_V6'"
-  config["gws"]["10"]["ipv4start"] = "172.21.'$((4*$GWID))'.2"
-  config["gws"]["10"]["ipv4end"] = "172.21.'$((4*$((GWID+1))-1))'.254"
+  config["gws"][GWID] = {}
+  config["gws"][GWID]["legacyipv4"] = "'$LEGIP'"
+  config["gws"][GWID]["legacyipv6"] = "fd21:b4dc:4b1e::a38:'$GWLID'"
+  config["gws"][GWID]["externalipv4"] = "'$EXT_IP_V4'"
+  config["gws"][GWID]["externalipv6"] = "'$EXT_IPS_V6'"
+  config["gws"][GWID]["ipv4start"] = "172.21.'$((4*$GWID))'.2"
+  config["gws"][GWID]["ipv4end"] = "172.21.'$((4*$((GWID+1))-1))'.254"
   json.dump(config, fp, indent=2)
   fp.close()
 '
@@ -321,6 +324,7 @@ if [ "x$OPT_FWLIHAS" == "x1" ]; then
   mkdir -p /etc/firewall.lihas.d/interface-tun9
   # Externes Interface
   mkdir -p /etc/firewall.lihas.d/interface-$EXT_IF_V4
+  ensureline 0.0.0.0/0 /etc/firewall.lihas.d/interface-$EXT_IF_V4/network
   ensureline 0.0.0.0/0 /etc/firewall.lihas.d/interface-lo/network
   for port in 10037 $(seq 10040 10044); do
     ensureline "0.0.0.0/0 0.0.0.0/0 udp $port" /etc/firewall.lihas.d/interface-$EXT_IF_V4/privclients
@@ -352,7 +356,7 @@ if [ "x$OPT_FWLIHAS" == "x1" ]; then
   done
   for i in $(seq 0 4); do
     for j in $(seq 0 4); do
-      ensureline "IPT_FILTER -A FORWARD -j ACCEPT -i br0$i -o br0$j" /etc/firewall.lihas.d/localhost
+      ensureline "IPT_FILTER '-A FORWARD -j ACCEPT -i br0$i -o br0$j'" /etc/firewall.lihas.d/localhost
     done
   done
   if [ "x$DIRECTTCP" != "x" ]; then

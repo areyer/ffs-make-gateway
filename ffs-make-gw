@@ -6,7 +6,7 @@ export LC_ALL=C
 
 print_help() {
 cat <<EOF >&2
-usage: $0 --gwid N [--vpnkey=xxxx] [--no-systemd] [--no-apt-update] [--no-apt-key] [--othergw=172.21.16.1] [--directtcp="443[ 995][...]"] [--with-lihas-firewall]
+usage: $0 --gwid N [--vpnkey=xxxx] [--no-systemd] [--no-apt-update] [--no-apt-key] [--othergw=172.21.16.1] [--directtcp="443[ 995][...]"] [--with-lihas-firewall] [--segments N] [--gws N]
 Verwandelt einen Debian Jessie Server mit systemd in ein Freifunk-GW
 --help:          Dieser Text
 --gwid:          Gateway ID (1-10)
@@ -14,29 +14,37 @@ Verwandelt einen Debian Jessie Server mit systemd in ein Freifunk-GW
 --othergw:       IP eines anderen GWs fuer ausgehenden Traffic, z.B. 172.21.16.1 (gw04)
 --directtcp:     Liste der TCP-Ports die direkt ausgeleitet werden, durch Leerzeichen getrennt (Quoting nicht vergessen)
 --with-lihas-firewall: Installiere LiHAS Firewall fuer policy routing
+--segments:      Anzahl Segmente, Default 4
+--gws:           Maximale Anzahle Gateways, nur fuer batman Namensaufloesung, Default 10
+--dhcp-relay-servers: DHCP Relay Server die dieses GW benutzt, Default "172.21.16.1 172.21.20.1"
 --no-systemd:    Nicht aufd systemd bestehen, dann muss man alles int-Zeugs von hand machen
 --no-apt-update: apt-get update nicht ausfuehren
 --no-apt-key:    keine neuen APT-Keys hinzufuegen
 EOF
 }
+DHCPRELAYSERVERS="172.21.16.1 172.21.20.1"
 NEEDS_SYSTEMD=1
 NEEDS_APTUPDATE=1
 NEEDS_APTKEY=1
 OPT_FWLIHAS=0
 DIRECTTCP=""
+SEGMENTS=4
+GWS=10
 VPNKEY="Wird generiert"
 error() {
   print_help
   echo "$*"
   exit 1
 }
-TEMP=`getopt -o h --long help,name:,ip:,gwid:,vpnkey:,with-lihas-firewall,othergw:,directtcp:,no-systemd,no-apt-update,no-apt-key -- "$@"`
+TEMP=`getopt -o h --long help,dhcp-relay-servers:,name:,ip:,gwid:,gws:,vpnkey:,with-lihas-firewall,othergw:,directtcp:,no-systemd,no-apt-update,no-apt-key,segments: -- "$@"`
 if [ $? != 0 ] ; then print_help >&2 ; exit 1 ; fi
 eval set -- "$TEMP"
 while true ; do
   case "$1" in
     --name)    GWNAME=$2; shift 2;;
     --gwid)      GWID=$2; shift 2;;
+    --gws)       GWS=$2; shift 2;;
+    --dhcp-relay-servers) DHCPRELAYSERVERS="$2"; shift 2;;
     --vpnkey)    VPNKEY=$2; shift 2;;
     --with-lihas-firewall) OPT_FWLIHAS=1; shift 1;;
     --othergw)		OTHERGW_IP=$2; shift 2;;
@@ -44,6 +52,7 @@ while true ; do
     --no-systemd)	NEEDS_SYSTEMD=0; shift 1;;
     --no-apt-update)	NEEDS_APTUPDATE=0; shift 1;;
     --no-apt-key)	NEEDS_APTKEY=0; shift 1;;
+    --segments)		SEGMENTS="$2"; shift 2;;
     --help|-h) print_help; exit 1;;
     --) shift ; break ;;
     *) echo "Unknown parameter $1, try -h" ; exit 1 ;;
@@ -137,7 +146,7 @@ EOF
 fi
 
 # batadv-vis ist nicht in backports
-apt-get -y install resolvconf bind9 build-essential bridge-utils batman-adv-dkms git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas)
+apt-get -y install resolvconf bind9 build-essential bridge-utils batman-adv-dkms git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip dnsmasq bind9 radvd conntrack $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas) isc-dhcp-relay apt-transport-https
 
 cat <<EOF
 ***********************************************************************
@@ -192,7 +201,9 @@ ExecStartPre=/bin/mkdir -p /var/run/fastd
 ExecStartPre=/bin/chown fastd /var/run/fastd
 ExecStartPre=/bin/rm -f /var/run/fastd/fastd-%I.sock
 ExecStart=/usr/bin/fastd --syslog-level debug2 --syslog-ident fastd@%I -c /etc/fastd/%I/fastd.conf --pid-file /var/run/fastd/fastd-%I.pid --status-socket /var/run/fastd/fastd-%I.sock --user fastd
+ExecStop=/sbin/kill $(ps ax | awk '$5 ~ /\/usr\/bin\/fastd/ && $0 ~ /vpn00/ {print $1}')
 ExecReload=/bin/kill -HUP $MAINPID
+ExecStop=/bin/kill $MAINPID
 
 [Install]
 WantedBy=multi-user.target
@@ -330,6 +341,7 @@ if [ "x$OPT_FWLIHAS" == "x1" ]; then
     ensureline "0.0.0.0/0 0.0.0.0/0 udp $port" /etc/firewall.lihas.d/interface-$EXT_IF_V4/privclients
     ensureline "0.0.0.0/0 0.0.0.0/0 udp $port" /etc/firewall.lihas.d/interface-lo/privclients
   done
+  ensureline "0.0.0.0/0 0.0.0.0/0 udp 67" /etc/firewall.lihas.d/interface-lo/privclients
   # Referenz Interface Freifunk
   mkdir -p /etc/firewall.lihas.d/interface-br00
   for i in $(seq 1 4); do
@@ -337,7 +349,7 @@ if [ "x$OPT_FWLIHAS" == "x1" ]; then
       ln -s /etc/firewall.lihas.d/interface-br00 /etc/firewall.lihas.d/interface-br0$i
     fi
   done
-  ensureline 172.16.0.0/16 /etc/firewall.lihas.d/interface-br00/network
+  ensureline 172.21.0.0/16 /etc/firewall.lihas.d/interface-br00/network
   ensureline 10.190.0.0/15 /etc/firewall.lihas.d/interface-br00/network
   ensureline dhcpd /etc/firewall.lihas.d/interface-br00/mark
   ensureline "0.0.0.0/0 hostgroup-gw$GWLID tcp 0" /etc/firewall.lihas.d/interface-br00/privclients
@@ -385,13 +397,21 @@ if [ "x$OPT_FWLIHAS" == "x1" ]; then
     for port in $DIRECTTCP; do
       ensureline "0.0.0.0/0 0.0.0.0/0 tcp $port direct" /etc/firewall.lihas.d/policy-routing
     done
+    for ip in $EXT_IP_V4; do
+      ensureline "$ip 0.0.0.0/0 tcp 0 direct" /etc/firewall.lihas.d/policy-routing
+      ensureline "$ip 0.0.0.0/0 udp 0 direct" /etc/firewall.lihas.d/policy-routing
+      ensureline "$ip 0.0.0.0/0 icmp 0 direct" /etc/firewall.lihas.d/policy-routing
+    done
+  fi
+  if [ ! -e /etc/firewall.lihas.d/interface-br00/policy-routing ]; then
+    ln -s /etc/firewall.lihas.d/policy-routing /etc/firewall.lihas.d/interface-br00/policy-routing
   fi
   mkdir -p /etc/firewall.lihas.d/groups
     # Eigene IP Adressen
     echo $EXT_IP_V4 > /etc/firewall.lihas.d/groups/hostgroup-gw$GWLID
     echo $LEGIP >> /etc/firewall.lihas.d/groups/hostgroup-gw$GWLID
     b=190
-    for seg in $(seq 0 4); do
+    for seg in $(seq 0 $SEGMENTS); do
       c=$(($seg*64))
       if [ $c -gt 255 ]; then
         b=191
@@ -401,18 +421,22 @@ if [ "x$OPT_FWLIHAS" == "x1" ]; then
     done >> /etc/firewall.lihas.d/groups/hostgroup-gw$GWLID
 fi
 
+# batman Namen
+for gw in $(seq 1 $GWS); do
+  ensureline "$(printf \"02:00:0a:38:00:%02i gw%02i\" $gw $gw)" /etc/bat-hosts
+  for seg in $(seq 1 $SEGMENTS); do
+    ensureline "$(printf \"02:00:0a:38:$%02i:%02i gw%02i-%i\" $seg $gw $gw $seg)" /etc/bat-hosts
+  done
+done
+
 cd "$OLDPWD"
 systemctl daemon-reload
 systemctl enable fastd@vpn00.service 
-systemctl enable fastd@vpn01.service 
-systemctl enable fastd@vpn02.service 
-systemctl enable fastd@vpn03.service 
-systemctl enable fastd@vpn04.service 
 systemctl enable alfred@bat00.service 
-systemctl enable alfred@bat01.service 
-systemctl enable alfred@bat02.service 
-systemctl enable alfred@bat03.service 
-systemctl enable alfred@bat04.service 
+for seg in $(seq 1 $SEGMENTS); do
+  systemctl enable fastd@vpn$(printf "%02i" $seg).service 
+  systemctl enable alfred@vpn$(printf "%02i" $seg).service 
+done
 
 # fastd keys
 cat <<'EOF' >/usr/local/bin/fastd-update
@@ -431,6 +455,13 @@ done
 killall -HUP fastd
 EOF
 chmod +x /usr/local/bin/fastd-update
+
+# DHCP Relay
+ensureline 'SERVERS="$DHCPRELAYSERVERS"' /etc/default/isc-dhcp-relay
+systemctl restart isc-dhcp-relay
+
+# Monitoring
+apt-get install check-mk-agent jq
 
 if [ x"$OPT_FWLIHAS" == x1 ]; then
   echo systemctl start firewall-lihas

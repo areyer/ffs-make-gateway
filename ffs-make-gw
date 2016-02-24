@@ -288,7 +288,7 @@ fi
 if [ x"$TINCBASE" != x"/etc/tinc/ffsbb" ]; then
     rsync -rlHpogDtSvx /etc/tinc/ffsbb/hosts/$HOSTNAME  $TINCBASE/ffsbb/hosts/
 fi
-if [ x$TINC_BB == x1 ];
+if [ x$TINC_BB == x1 ]; then
   git add hosts/$HOSTNAME
   git commit -m "hosts/$HOSTNAME"
   git push

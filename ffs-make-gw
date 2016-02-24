@@ -6,20 +6,22 @@ export LC_ALL=C
 
 print_help() {
 cat <<EOF >&2
-usage: $0 --gwid N [--vpnkey=xxxx] [--no-systemd] [--no-apt-update] [--no-apt-key] [--othergw=172.21.16.1] [--directtcp="443[ 995][...]"] [--with-lihas-firewall] [--segments N] [--gws N]
+usage: $0 --gwid N [--vpnkey=xxxx] [--no-systemd] [--no-apt-update] [--no-apt-key] [--othergw=172.21.16.1] [--directtcp="443[ 995][...]"] [--with-lihas-firewall] [--segments N] [--gws N] [--with-backbone-vpn]
 Verwandelt einen Debian Jessie Server mit systemd in ein Freifunk-GW
 --help:          Dieser Text
+--name:          Gatewayname
 --gwid:          Gateway ID (1-10)
 --vpnkey:        use this fastd private key (string)
---othergw:       IP eines anderen GWs fuer ausgehenden Traffic, z.B. 172.21.16.1 (gw04)
---directtcp:     Liste der TCP-Ports die direkt ausgeleitet werden, durch Leerzeichen getrennt (Quoting nicht vergessen)
---with-lihas-firewall: Installiere LiHAS Firewall fuer policy routing
---segments:      Anzahl Segmente, Default 4
---gws:           Maximale Anzahle Gateways, nur fuer batman Namensaufloesung, Default 10
 --dhcp-relay-servers: DHCP Relay Server die dieses GW benutzt, Default "172.21.16.1 172.21.20.1"
---no-systemd:    Nicht aufd systemd bestehen, dann muss man alles int-Zeugs von hand machen
---no-apt-update: apt-get update nicht ausfuehren
+--directtcp:     Liste der TCP-Ports die direkt ausgeleitet werden, durch Leerzeichen getrennt (Quoting nicht vergessen)
+--gws:           Maximale Anzahle Gateways, nur fuer batman Namensaufloesung, Default 10
 --no-apt-key:    keine neuen APT-Keys hinzufuegen
+--no-apt-update: apt-get update nicht ausfuehren
+--no-systemd:    Nicht aufd systemd bestehen, dann muss man alles int-Zeugs von hand machen
+--othergw:       IP eines anderen GWs fuer ausgehenden Traffic, z.B. 172.21.16.1 (gw04)
+--segments:      Anzahl Segmente, Default 4
+--with-lihas-firewall: Installiere LiHAS Firewall fuer policy routing
+--with-backbone-vpn: Nimm das backbone-tinc, github-Schreibzugriff auf git+ssh://git@github.com/freifunk-stuttgart/tinc-ffsbb wird benoetigt
 EOF
 }
 DHCPRELAYSERVERS="172.21.16.1 172.21.20.1"
@@ -30,28 +32,32 @@ OPT_FWLIHAS=0
 DIRECTTCP=""
 SEGMENTS=4
 GWS=10
+GWSUBID=""
+TINC_BB=0
 VPNKEY="Wird generiert"
 error() {
   print_help
   echo "$*"
   exit 1
 }
-TEMP=`getopt -o h --long help,dhcp-relay-servers:,name:,ip:,gwid:,gws:,vpnkey:,with-lihas-firewall,othergw:,directtcp:,no-systemd,no-apt-update,no-apt-key,segments: -- "$@"`
+TEMP=`getopt -o h --long help,dhcp-relay-servers:,name:,ip:,gwid:,gwsubid:,gws:,vpnkey:,with-backbone-vpn,with-lihas-firewall,othergw:,directtcp:,no-systemd,no-apt-update,no-apt-key,segments: -- "$@"`
 if [ $? != 0 ] ; then print_help >&2 ; exit 1 ; fi
 eval set -- "$TEMP"
 while true ; do
   case "$1" in
-    --name)    GWNAME=$2; shift 2;;
-    --gwid)      GWID=$2; shift 2;;
-    --gws)       GWS=$2; shift 2;;
+    --name)             GWNAME=$2; shift 2;;
+    --gwid)             GWID=$2; shift 2;;
+    --gwsubid)          GWSUBID=$2; shift 2;;
+    --gws)              GWS=$2; shift 2;;
     --dhcp-relay-servers) DHCPRELAYSERVERS="$2"; shift 2;;
-    --vpnkey)    VPNKEY=$2; shift 2;;
+    --vpnkey)           VPNKEY=$2; shift 2;;
     --with-lihas-firewall) OPT_FWLIHAS=1; shift 1;;
     --othergw)		OTHERGW_IP=$2; shift 2;;
     --directtcp)	DIRECTTCP="$2"; shift 2;;
     --no-systemd)	NEEDS_SYSTEMD=0; shift 1;;
     --no-apt-update)	NEEDS_APTUPDATE=0; shift 1;;
     --no-apt-key)	NEEDS_APTKEY=0; shift 1;;
+    --with-backbone-vpn) TINC_BB=1; shift 1;;
     --segments)		SEGMENTS="$2"; shift 2;;
     --help|-h) print_help; exit 1;;
     --) shift ; break ;;
@@ -146,7 +152,7 @@ EOF
 fi
 
 # batadv-vis ist nicht in backports
-apt-get -y install resolvconf bind9 build-essential bridge-utils batman-adv-dkms git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip dnsmasq bind9 radvd conntrack $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas) isc-dhcp-relay apt-transport-https
+apt-get -y install resolvconf bind9 build-essential bridge-utils batman-adv-dkms git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip dnsmasq bind9 radvd conntrack $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas) isc-dhcp-relay apt-transport-https libjson-xs-perl libdata-dump-perl
 
 cat <<EOF
 ***********************************************************************
@@ -254,6 +260,51 @@ iface bat00 inet6 manual
         post-up         /usr/sbin/batctl -m \$IFACE vm server || true
         post-up         /usr/sbin/batctl -m \$IFACE gw server  50mbit/50mbit || true
         pre-down        /sbin/brctl delif br00 \$IFACE || true
+EOF
+
+TINCBASE=/etc/tinc/ffsbb
+if [ ! -d /etc/tinc/ffsbb/.git ]; then
+  mkdir -p /etc/tinc
+  git clone git+ssh://git@github.com/freifunk-stuttgart/tinc-ffsbb /etc/tinc/ffsbb
+fi
+if [ ! -e /etc/tinc/ffsbb/tinc.conf ]; then
+    ln -s $TINCBASE/tinc.conf.sample /etc/tinc/ffsbb/tinc.conf
+fi
+if [ ! -e /etc/tinc/ffsbb/subnet-up ]; then
+    ln -s $TINCBASE/subnet-up.sample /etc/tinc/ffsbb/subnet-up
+fi
+if [ ! -e /etc/tinc/ffsbb/subnet-down ]; then
+    ln -s $TINCBASE/subnet-down.conf.sample /etc/tinc/ffsbb/subnet-down
+fi
+cd $TINCBASE
+ensureline "PMTUDiscovery = yes" /etc/tinc/ffsbb/hosts/$HOSTNAME
+ensureline "Digest = sha256" /etc/tinc/ffsbb/hosts/$HOSTNAME
+ensureline "ClampMSS = yes" /etc/tinc/ffsbb/hosts/$HOSTNAME
+ensureline "Address = $HOSTNAME.freifunk-stuttgart.de" /etc/tinc/ffsbb/hosts/$HOSTNAME
+ensureline "Port = 119${HOSTNAME##gw}" /etc/tinc/ffsbb/hosts/$HOSTNAME
+if [ ! -e /etc/tinc/ffsbb/rsa_key.priv ]; then
+  tincd -n ffsbb -K 4096
+fi
+if [ x"$TINCBASE" != x"/etc/tinc/ffsbb" ]; then
+    rsync -rlHpogDtSvx /etc/tinc/ffsbb/hosts/$HOSTNAME  $TINCBASE/ffsbb/hosts/
+fi
+if [ x$TINC_BB == x1 ];
+  git add hosts/$HOSTNAME
+  git commit -m "hosts/$HOSTNAME"
+  git push
+fi
+cat <<EOF >/etc/network/interfaces.d/ffsbb
+allow-hotplug ffsbb
+auto ffsbb
+iface ffsbb inet static
+    tinc-net ffsbb
+    tinc-mlock yes
+    tinc-pidfile /var/run/tinc.ffsbb.pid
+    address 10.191.255.$(sed 's/gw0*//' <<<$HOSTNAME)/24    # Z.B. 10.191.255.10
+    netmask 255.255.255.0
+    broadcast 10.191.255.255
+    post-up         /sbin/ip rule add iif \$IFACE table stuttgart priority 7000 || true
+    pre-down        /sbin/ip rule del iif \$IFACE table stuttgart priority 7000 || true
 EOF
 
 if [ ! -d /etc/fastd/ffs-vpn/peers/.git ]; then
@@ -423,9 +474,9 @@ fi
 
 # batman Namen
 for gw in $(seq 1 $GWS); do
-  ensureline "$(printf \"02:00:0a:38:00:%02i gw%02i\" $gw $gw)" /etc/bat-hosts
+  ensureline "$(printf '02:00:0a:38:00:%02i gw%02i\n' $gw $gw)" /etc/bat-hosts
   for seg in $(seq 1 $SEGMENTS); do
-    ensureline "$(printf \"02:00:0a:38:$%02i:%02i gw%02i-%i\" $seg $gw $gw $seg)" /etc/bat-hosts
+    ensureline "$(printf '02:00:0a:38:%02i:%02i gw%02i-%i' $seg $gw $gw $seg)" /etc/bat-hosts
   done
 done
 
@@ -455,9 +506,69 @@ done
 killall -HUP fastd
 EOF
 chmod +x /usr/local/bin/fastd-update
+cat <<'EOF' >/etc/cron.d/fastd-update 
+*/3 * * * * root /usr/local/bin/fastd-update
+EOF
+
+cat <<'EOF' >/usr/local/bin/fastd-status
+#!/usr/bin/perl
+use strict;
+use JSON::XS;
+use DBI;
+use Data::Dump qw(dump);
+my $DBFILE="/var/lib/misc/fastd-stats.sqlite";
+my $fastd_status_string = "";
+
+use IO::Socket::UNIX qw( SOCK_STREAM );
+
+$ARGV[0] or die("Usage: status.pl <socket>\n");
+
+my $socket = IO::Socket::UNIX->new(
+   Type => SOCK_STREAM,
+   Peer => $ARGV[0],
+) or die("Can't connect to server: $!\n");
+
+foreach my $line (<$socket>) {
+         $fastd_status_string .= $line;
+}
+
+my $dbh = DBI->connect("dbi:SQLite:dbname=$DBFILE","","");
+$dbh->do("CREATE TABLE IF NOT EXISTS fastd_last_connected (pubkey TEXT PRIMARY KEY ON CONFLICT REPLACE, time integer)");
+$dbh->do("CREATE TABLE IF NOT EXISTS fastd_mac (pubkey TEXT PRIMARY KEY ON CONFLICT REPLACE, mac TEXT)");
+$dbh->do("CREATE TABLE IF NOT EXISTS fastd_name (pubkey TEXT PRIMARY KEY ON CONFLICT REPLACE, name TEXT)");
+$dbh->do("CREATE TABLE IF NOT EXISTS fastd_gw (pubkey TEXT PRIMARY KEY ON CONFLICT REPLACE, gw TEXT)");
+my $time = time();
+my $sth_connected = $dbh->prepare("INSERT OR REPLACE INTO fastd_last_connected (pubkey,time) VALUES (?,?)");
+my $sth_mac = $dbh->prepare("INSERT OR REPLACE INTO fastd_mac (pubkey,mac) VALUES (?,?)");
+my $sth_get_mac = $dbh->prepare("SELECT * FROM fastd_mac WHERE pubkey=?");
+my $sth_name = $dbh->prepare("INSERT OR REPLACE INTO fastd_name (pubkey,name) VALUES (?,?)");
+my $sth_gw = $dbh->prepare("INSERT OR REPLACE INTO fastd_gw (pubkey,gw) VALUES (?,?)");
+
+my @fastd_status = decode_json($fastd_status_string);
+foreach my $peer ( keys (%{$fastd_status[0]{peers}})) {
+        if (defined($fastd_status[0]{peers}{$peer}{connection})) {
+                my $address = $fastd_status[0]{peers}{$peer}{address};
+                $address =~s/:[^:]*$//;
+                # print "$peer\t".$address."\t".$fastd_status[0]{peers}{$peer}{name}."\t".$fastd_status[0]{peers}{$peer}{connection}{mac_addresses}[0]."\n";
+                $sth_connected->execute($peer,$time);
+                $sth_mac->execute($peer,$fastd_status[0]{peers}{$peer}{connection}{mac_addresses}[0]);
+        } else {
+        }
+        $sth_name->execute($peer,$fastd_status[0]{peers}{$peer}{name});
+}
+
+my $sth = $dbh->prepare("SELECT name,mac FROM fastd_name JOIN fastd_last_connected ON fastd_name.pubkey=fastd_last_connected.pubkey JOIN fastd_mac ON fastd_name.pubkey=fastd_mac.pubkey WHERE time<(SELECT MAX(fastd_last_connected.time) FROM fastd_last_connected)");
+my ($mac, $name);
+$sth->execute();
+$sth->bind_columns(\$name,\$mac);
+while ( $sth->fetch ) {
+        print "$name\t$mac\n";
+}
+EOF
+chmod +x /usr/local/bin/fastd-status
 
 # DHCP Relay
-ensureline 'SERVERS="$DHCPRELAYSERVERS"' /etc/default/isc-dhcp-relay
+ensureline "SERVERS=\"$DHCPRELAYSERVERS\"" /etc/default/isc-dhcp-relay
 systemctl restart isc-dhcp-relay
 
 # Monitoring

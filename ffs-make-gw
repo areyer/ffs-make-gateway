@@ -97,60 +97,20 @@ if [ ! -d /etc/apt/sources.list.d ]; then
 	mkdir -p /etc/apt/sources.list.d
 fi
 
-ensureline() {
-	LINE="$1"
-	FILE="$2"
-	if [ ! -e "$FILE" ]; then
-		touch "$FILE" || return 1
-	fi
-	egrep -q '^'"$LINE"'$' "$FILE" || echo "$LINE" >> "$FILE" || return 1
-}
+. ensureline.sh
+. add_repositories.sh
+. setup_batman.sh
+. setup_system.sh
+. setup_interface.sh
+. setup_fastd.sh
 
-ensureline "deb http://ppa.launchpad.net/freifunk-mwu/freifunk-ppa/ubuntu trusty main" /etc/apt/sources.list.d/freifunk.list
-ensureline "deb-src http://ppa.launchpad.net/freifunk-mwu/freifunk-ppa/ubuntu trusty main" /etc/apt/sources.list.d/freifunk.list
-ensureline "deb http://repo.universe-factory.net/debian/ sid main" /etc/apt/sources.list.d/freifunk.list
-if [ "x$OPT_FWLIHAS" == "x1" ]; then
-  ensureline "deb http://ftp.lihas.de/debian/ stable main" /etc/apt/sources.list.d/lihas.list
-fi
+add_apt_repositories
+add_apt_preference
+if [ x"$NEEDS_APTKEY" == x1 ]; then add_apt_keys fi
 
-cat <<'EOF' >/etc/apt/preferences.d/alfred
-Package: alfred
-Pin:  release n=jessie-backports
-Pin-Priority:  500
-EOF
+if [ x"$NEEDS_APTUPDATE" == x1 ]; then apt-get update fi
 
-if [ x"$NEEDS_APTKEY" == x1 ]; then
-  apt-key adv --keyserver keyserver.ubuntu.com --recv 16EF3F64CB201D9C
-  apt-key adv --keyserver keyserver.ubuntu.com --recv B976BD29286CC7A4
-  if [ "x$OPT_FWLIHAS" == "x1" ]; then
-    wget -O - http://ftp.lihas.de/debian/apt-key-lihas.gpg | apt-key add -
-  fi
-fi
-if [ x"$NEEDS_APTUPDATE" == x1 ]; then
-  apt-get update
-fi
-
-apt-get -y install linux-headers-$(uname -r)
-# batman-adv-dkms haengt von linux-headers-generic ab, das gibt es auf Debian nicht
-if ! dpkg -l equivs >/dev/null 2>&1; then
-  apt-get install equivs
-fi
-if ! dpkg -l linux-headers-generic | grep -qw $(uname -r); then
-  TMPDIR=$(mktemp -d)
-  equivs-control $TMPDIR/linux-headers-generic
-  sed -i '
-    s/^Package:.*/Package: linux-headers-generic/
-    s/^# Version:.*/Version: '"$(uname -r)"'/
-    /^Description/,$d
-  ' $TMPDIR/linux-headers-generic
-  cat <<EOF >>$TMPDIR/linux-headers-generic
-Description: linux-headers-generic translation package
- linux-headers-generic translation package for batman-adv-dkms
-EOF
-  equivs-build $TMPDIR/linux-headers-generic
-  dpkg -i linux-headers-generic_$(uname -r)_all.deb
-  rm -rf "$TMPDIR"
-fi
+setup_batman_dkms
 
 # batadv-vis ist nicht in backports
 apt-get -y install resolvconf bind9 build-essential bridge-utils batman-adv-dkms git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip dnsmasq bind9 radvd conntrack $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas) isc-dhcp-relay apt-transport-https libjson-xs-perl libdata-dump-perl sysfsutils xinetd
@@ -181,154 +141,21 @@ Alias=alfred.service
 EOF
 systemctl daemon-reload
 fi
-cat <<EOF >/etc/sysctl.d/999-freifunk.conf
-net.ipv4.ip_forward=1
-net.ipv6.conf.all.forwarding=1
 
-kernel.panic=3
-net.ipv4.conf.default.send_redirects=0
-net.ipv4.conf.all.send_redirects=0
-net.ipv4.conf.br00.send_redirects=0
-net.ipv4.conf.br01.send_redirects=0
-net.ipv4.conf.br02.send_redirects=0
-net.ipv4.conf.br03.send_redirects=0
-net.ipv4.conf.br04.send_redirects=0
-net.ipv4.conf.eth0.send_redirects=0
-net.ipv4.conf.lo.send_redirects=0
-net.ipv4.conf.default.arp_ignore=1
-net.ipv4.conf.all.arp_ignore=1
-net.ipv4.ip_forward=1
-net.ipv4.icmp_echo_ignore_broadcasts=1
-net.ipv4.icmp_ignore_bogus_error_response==1
-net.ipv4.igmp_max_memberships=100
-net.ipv4.tcp_ecn=0
-net.ipv4.tcp_fin_timeout=30
-net.ipv4.tcp_keepalive_time=120
-net.ipv4.tcp_syncookies=1
-net.ipv4.tcp_timestamps=1
-net.ipv4.tcp_sack=1
-net.ipv4.tcp_dsack=1
+setup_system_sysctl
+setup_system_routing
+setup_fastd
 
-net.ipv6.conf.default.forwarding=1
-net.ipv6.conf.all.forwarding=1
-
-net.netfilter.nf_conntrack_acct=1
-net.netfilter.nf_conntrack_checksum=0
-net.netfilter.nf_conntrack_max=1000000
-net.netfilter.nf_conntrack_tcp_timeout_established=7440
-net.netfilter.nf_conntrack_udp_timeout=60
-net.netfilter.nf_conntrack_udp_timeout_stream=180
-net.netfilter.nf_conntrack_skip_filter=1
-
-# disable bridge firewalling by default
-net.bridge.bridge-nf-call-arptables=0
-net.bridge.bridge-nf-call-ip6tables=0
-net.bridge.bridge-nf-call-iptables=0
-net.ipv6.conf.all.accept_ra=0
-net.ipv6.conf.default.accept_ra=0
-vm.panic_on_oom=1
-EOF
-sysctl -p /etc/sysctl.d/999-freifunk.conf
-
-ensureline "42	icvpn" /etc/iproute2/rt_tables
-ensureline "70	stuttgart" /etc/iproute2/rt_tables
-ensureline "71	nodefault" /etc/iproute2/rt_tables
-ensureline "1000	othergw" /etc/iproute2/rt_tables
-ensureline "2000	direct" /etc/iproute2/rt_tables
-
-if ! getent passwd fastd 2>/dev/null 1>&2; then
-  adduser --system --no-create-home fastd
-fi
-if [ ! -e /etc/systemd/system/fastd@.service ]; then
-  cat <<'EOF' >/etc/systemd/system/fastd@.service
-[Unit]
-Description=Fast and Secure Tunnelling Daemon (connection %I)
-After=network.target
-
-[Service]
-Type=notify
-ExecStartPre=/bin/mkdir -p /var/run/fastd
-ExecStartPre=/bin/chown fastd /var/run/fastd
-ExecStartPre=/bin/rm -f /var/run/fastd/fastd-%I.sock
-ExecStart=/usr/bin/fastd --syslog-level debug2 --syslog-ident fastd@%I -c /etc/fastd/%I/fastd.conf --pid-file /var/run/fastd/fastd-%I.pid --status-socket /var/run/fastd/fastd-%I.sock --user fastd
-ExecStop=/sbin/kill $(ps ax | awk '$5 ~ /\/usr\/bin\/fastd/ && $0 ~ /vpn00/ {print $1}')
-ExecReload=/bin/kill -HUP $MAINPID
-ExecStop=/bin/kill $MAINPID
-
-[Install]
-WantedBy=multi-user.target
-EOF
-fi
-# Legacy Segment
+# Networking
 ensureline "source-directory interfaces.d" /etc/network/interfaces
-cat <<EOF >/etc/network/interfaces.d/ffs-seg00
-auto br00
-iface br00 inet static
-        bridge_ports none
-        bridge_fd 0
-        bridge_maxwait 0
-	bridge_hw	02:00:0a:38:00:$GWLID
-        address $LEGIP
-        netmask 255.255.192.0
-	broadcast 172.21.63.255
-        # be sure all incoming traffic is handled by the appropriate rt_table
-        post-up         /sbin/ip rule add iif \$IFACE table stuttgart priority 10000 || true
-        pre-down        /sbin/ip rule del iif \$IFACE table stuttgart priority 10000 || true
-        post-up         /sbin/ip rule add iif \$IFACE table nodefault priority 10001 || true
-        pre-down        /sbin/ip rule del iif \$IFACE table nodefault priority 10001 || true
-        # default route is unreachable
-        post-up         /sbin/ip route add 172.21.0.0/18 dev \$IFACE table stuttgart || true
-        post-up         /sbin/ip route add unreachable default table nodefault || true
-        post-down       /sbin/ip route del unreachable default table nodefault || true
-        post-down       /sbin/ip route del 172.21.0.0/18 dev \$IFACE table stuttgart || true
- 
-iface br00 inet6 static
-        address fd21:b4dc:4b1e::a38:$GWLID
-        netmask 64
-        # ULA route mz for rt_table stuttgart
-        post-up         /sbin/ip -6 route add fd21:b4dc:4b1e::/64 proto static dev \$IFACE table stuttgart || true
-        post-down       /sbin/ip -6 route del fd21:b4dc:4b1e::/64 proto static dev \$IFACE table stuttgart || true
-
-allow-hotplug vpn00
-iface vpn00 inet6 manual
-        pre-up          ip link set \$IFACE address 02:00:0a:38:00:$GWLID up || true
-        post-up         /usr/sbin/batctl -m bat00 if add \$IFACE || true
-        post-up         /sbin/ip link set dev bat00 up || true
-
-allow-hotplug bat00
-iface bat00 inet6 manual
-        pre-up          /sbin/modprobe batman-adv
-        post-up         ip link set \$IFACE up || true
-        post-up         /sbin/brctl addif br00 \$IFACE || true
-        post-up         /usr/sbin/batctl -m \$IFACE it 10000 || true
-        post-up         /usr/sbin/batctl -m \$IFACE vm server || true
-        post-up         /usr/sbin/batctl -m \$IFACE gw server  50mbit/50mbit || true
-        pre-down        /sbin/brctl delif br00 \$IFACE || true
-EOF
+# Legacy Segment
+setup_interface_seg00
 
 TINCBASE=/etc/tinc/ffsbb
-if [ ! -d /etc/tinc/ffsbb/.git ]; then
-  mkdir -p /etc/tinc
-  git clone git+ssh://git@github.com/freifunk-stuttgart/tinc-ffsbb /etc/tinc/ffsbb
-fi
-if [ ! -e /etc/tinc/ffsbb/tinc.conf ]; then
-    ln -s $TINCBASE/tinc.conf.sample /etc/tinc/ffsbb/tinc.conf
-fi
-if [ ! -e /etc/tinc/ffsbb/subnet-up ]; then
-    ln -s $TINCBASE/subnet-up.sample /etc/tinc/ffsbb/subnet-up
-fi
-if [ ! -e /etc/tinc/ffsbb/subnet-down ]; then
-    ln -s $TINCBASE/subnet-down.conf.sample /etc/tinc/ffsbb/subnet-down
-fi
+setup_tinc_base
 cd $TINCBASE
-ensureline "PMTUDiscovery = yes" /etc/tinc/ffsbb/hosts/$HOSTNAME
-ensureline "Digest = sha256" /etc/tinc/ffsbb/hosts/$HOSTNAME
-ensureline "ClampMSS = yes" /etc/tinc/ffsbb/hosts/$HOSTNAME
-ensureline "Address = $HOSTNAME.freifunk-stuttgart.de" /etc/tinc/ffsbb/hosts/$HOSTNAME
-ensureline "Port = 119${HOSTNAME##gw}" /etc/tinc/ffsbb/hosts/$HOSTNAME
-if [ ! -e /etc/tinc/ffsbb/rsa_key.priv ]; then
-  tincd -n ffsbb -K 4096
-fi
+setup_tinc_config
+setup_tinc_key
 if [ x"$TINCBASE" != x"/etc/tinc/ffsbb" ]; then
     rsync -rlHpogDtSvx /etc/tinc/ffsbb/hosts/$HOSTNAME  $TINCBASE/ffsbb/hosts/
 fi
@@ -355,178 +182,26 @@ if [ ! -d /etc/fastd/ffs-vpn/peers/.git ]; then
   mkdir -p /etc/fastd/ffs-vpn
   git clone https://github.com/freifunk-stuttgart/peers-ffs /etc/fastd/ffs-vpn/peers
 fi
-for i in $(seq 0 4); do
-  VPNID=$(printf "%02i" $i)
-  if [ $i -eq 0 ]; then
-    VPNPORT=10037
-  else
-    VPNPORT=1004$i
-  fi
-  dir=/etc/fastd/vpn$VPNID
-  mkdir -p $dir
-  cat <<EOF >$dir/fastd.conf
-log to syslog level warn;
-interface "vpn$VPNID";
-method "salsa2012+gmac";    # new method, between gateways for the moment (faster)
-method "salsa2012+umac";  
-$(for a in $EXT_IP_V4; do echo bind $a:$VPNPORT\;; done)
-$(for a in $EXT_IPS_V6; do echo bind [$a]:$VPNPORT\;; done)
+setup_fastd_config
+setup_fastd_key
 
-include "/etc/fastd/ffs-vpn/secret.conf";
-mtu 1406; # 1492 - IPv4/IPv6 Header - fastd Header...
-on verify "/root/freifunk/unclaimed.py";
-status socket "/var/run/fastd-vpn$VPNID.sock";
-include peers from "/etc/fastd/ffs-vpn/peers/vpn$VPNID/peers";
-EOF
-done
-if [ "$VPNKEY" == "Wird generiert" ] && [ ! -e /etc/fastd/ffs-vpn/secret.conf ]; then
-  VPNKEY=$(fastd --generate-key --machine-readable)
-  cat <<EOF >/etc/fastd/ffs-vpn/secret.conf
-secret "$VPNKEY";
-EOF
-elif [ "$VPNKEY" != "Wird generiert" ]; then
-  cat <<EOF >/etc/fastd/ffs-vpn/secret.conf
-secret "$VPNKEY";
-EOF
-else
-  VPNKEY=$(sed -n '/secret/{ s/.* "//; s/".*//; p}' /etc/fastd/ffs-vpn/secret.conf)
-fi
 OLDDIR=$(pwd)
 mkdir -p /root/git
 cd /root/git
 
-
-if [ ! -d /root/git/FfsConfigGenerator ]; then
-  pip2 install --upgrade netaddr
-  git clone https://github.com/freifunk-stuttgart/FfsConfigGenerator.git
-  cd FfsConfigGenerator
-else
-  cd /root/git/FfsConfigGenerator
-  git pull
-fi
-python -c '
-import json, sys
-GWID='$GWID'
-fp = open("config.json","rb")
-config = json.load(fp)
-fp.close()
-if ( "$GWID" not in config["gws"] ):
-  fp = open("config.json","wb")
-  config["gws"][GWID] = {}
-  config["gws"][GWID]["legacyipv4"] = "'$LEGIP'"
-  config["gws"][GWID]["legacyipv6"] = "fd21:b4dc:4b1e::a38:'$GWLID'"
-  config["gws"][GWID]["externalipv4"] = "'$EXT_IP_V4'"
-  config["gws"][GWID]["externalipv6"] = "'$EXT_IPS_V6'"
-  config["gws"][GWID]["ipv4start"] = "172.21.'$((4*$GWID))'.2"
-  config["gws"][GWID]["ipv4end"] = "172.21.'$((4*$((GWID+1))-1))'.254"
-  json.dump(config, fp, indent=2)
-  fp.close()
-'
+# Patch and run FfsConfigGenerator
+setup_ffsconfiggenerator_config
 ./gen_config.py --gwnum $GWID
-rsync -rlHpogDtvx --exclude etc/fastd etc /
 
-if [ "x$OPT_FWLIHAS" == "x1" ]; then
-  # Uplink VPN Interface
-  mkdir -p /etc/firewall.lihas.d/interface-tun9
-  # Externes Interface
-  mkdir -p /etc/firewall.lihas.d/interface-$EXT_IF_V4
-  ensureline 0.0.0.0/0 /etc/firewall.lihas.d/interface-$EXT_IF_V4/network
-  ensureline 0.0.0.0/0 /etc/firewall.lihas.d/interface-lo/network
-  for port in 10037 $(seq 10040 10044); do
-    ensureline "0.0.0.0/0 0.0.0.0/0 udp $port" /etc/firewall.lihas.d/interface-$EXT_IF_V4/privclients
-    ensureline "0.0.0.0/0 0.0.0.0/0 udp $port" /etc/firewall.lihas.d/interface-lo/privclients
-  done
-  # monitoring from lenny.ua25.de
-  ensureline "88.198.194.43 0.0.0.0/0 tcp 6556" /etc/firewall.lihas.d/interface-$EXT_IF_V4/privclients
-  ensureline "0.0.0.0/0 0.0.0.0/0 udp 67" /etc/firewall.lihas.d/interface-lo/privclients
-  # Referenz Interface Freifunk
-  mkdir -p /etc/firewall.lihas.d/interface-br00
-  for i in $(seq 1 4); do
-    if [ ! -e /etc/firewall.lihas.d/interface-br0$i ]; then
-      ln -s /etc/firewall.lihas.d/interface-br00 /etc/firewall.lihas.d/interface-br0$i
-    fi
-  done
-  ensureline 172.21.0.0/16 /etc/firewall.lihas.d/interface-br00/network
-  ensureline 10.190.0.0/15 /etc/firewall.lihas.d/interface-br00/network
-  ensureline dhcpd /etc/firewall.lihas.d/interface-br00/mark
-  ensureline "0.0.0.0/0 hostgroup-gw$GWLID tcp 0" /etc/firewall.lihas.d/interface-br00/privclients
-  ensureline "0.0.0.0/0 hostgroup-gw$GWLID udp 0" /etc/firewall.lihas.d/interface-br00/privclients
-  ensureline "0.0.0.0/0 hostgroup-gw$GWLID icmp 0" /etc/firewall.lihas.d/interface-br00/privclients
-  ensureline "hostgroup-gw$GWLID 255.255.255.255 udp 68" /etc/firewall.lihas.d/interface-br00/privclients
-  for iface in tun9 br00 br01 br03 br04 ffsbb; do
-    ensureline "0.0.0.0/0 0.0.0.0/0 tcp 0 $iface" /etc/firewall.lihas.d/interface-br00/privclients
-    ensureline "0.0.0.0/0 0.0.0.0/0 udp 0 $iface" /etc/firewall.lihas.d/interface-br00/privclients
-    ensureline "0.0.0.0/0 0.0.0.0/0 icmp 0 $iface" /etc/firewall.lihas.d/interface-br00/privclients
-  done
-  for iface in tun9 $EXT_IF_V4; do
-    ensureline "0.0.0.0/0 0.0.0.0/0 tcp 0" /etc/firewall.lihas.d/interface-$iface/masquerade
-    ensureline "0.0.0.0/0 0.0.0.0/0 udp 0" /etc/firewall.lihas.d/interface-$iface/masquerade
-    ensureline "0.0.0.0/0 0.0.0.0/0 icmp 0" /etc/firewall.lihas.d/interface-$iface/masquerade
-  done
-  for i in $(seq 0 4); do
-    for j in $(seq 0 4); do
-      ensureline "IPT_FILTER '-A FORWARD -j ACCEPT -i br0$i -o br0$j'" /etc/firewall.lihas.d/localhost
-    done
-  done
-  if [ "x$DIRECTTCP" != "x" ]; then
-    for port in $DIRECTTCP; do
-      ensureline "0.0.0.0/0 0.0.0.0/0 tcp $port" /etc/firewall.lihas.d/interface-br00/privclients
-    done
-  fi
-  ensureline "0.0.0.0/0 0.0.0.0/0 icmp 3" /etc/firewall.lihas.d/interface-br00/privclients
-  ensureline "0.0.0.0/0 0.0.0.0/0 icmp 4" /etc/firewall.lihas.d/interface-br00/privclients
-  # Loopback, was lokale ausgehend ist
-  mkdir -p /etc/firewall.lihas.d/interface-lo
-  if [ "x$OTHERGW_IP" != "x" ]; then
-    mkdir -p /etc/firewall.lihas.d/policy-routing-othergw
-      echo othergw > /etc/firewall.lihas.d/policy-routing-othergw/comment
-      echo 0x1000 > /etc/firewall.lihas.d/policy-routing-othergw/key
-      echo NET br00 $OTHERGW_IP > /etc/firewall.lihas.d/policy-routing-othergw/gateway
-      ensureline "0.0.0.0/0 0.0.0.0/0 tcp 0 othergw" /etc/firewall.lihas.d/policy-routing
-      ensureline "0.0.0.0/0 0.0.0.0/0 udp 0 othergw" /etc/firewall.lihas.d/policy-routing
-      ensureline "0.0.0.0/0 0.0.0.0/0 icmp 0 othergw" /etc/firewall.lihas.d/policy-routing
-  fi
-  if [ "x$DIRECTTCP" != "x" ]; then
-    mkdir -p /etc/firewall.lihas.d/policy-routing-direct
-      echo direct > /etc/firewall.lihas.d/policy-routing-direct/comment
-      echo 0x2000 > /etc/firewall.lihas.d/policy-routing-direct/key
-      echo NET $EXT_IF_V4 $EXT_GW_V4 > /etc/firewall.lihas.d/policy-routing-direct/gateway
-    for port in $DIRECTTCP; do
-      ensureline "0.0.0.0/0 0.0.0.0/0 tcp $port direct" /etc/firewall.lihas.d/policy-routing
-    done
-    for ip in $EXT_IP_V4; do
-      ensureline "$ip 0.0.0.0/0 tcp 0 direct" /etc/firewall.lihas.d/policy-routing
-      ensureline "$ip 0.0.0.0/0 udp 0 direct" /etc/firewall.lihas.d/policy-routing
-      ensureline "$ip 0.0.0.0/0 icmp 0 direct" /etc/firewall.lihas.d/policy-routing
-    done
-  fi
-  if [ ! -e /etc/firewall.lihas.d/interface-br00/policy-routing ]; then
-    ln -s /etc/firewall.lihas.d/policy-routing /etc/firewall.lihas.d/interface-br00/policy-routing
-  fi
-  mkdir -p /etc/firewall.lihas.d/groups
-    # Eigene IP Adressen
-    echo $EXT_IP_V4 > /etc/firewall.lihas.d/groups/hostgroup-gw$GWLID
-    echo $LEGIP >> /etc/firewall.lihas.d/groups/hostgroup-gw$GWLID
-    b=190
-    for seg in $(seq 0 $SEGMENTS); do
-      c=$(($seg*64))
-      if [ $c -gt 255 ]; then
-        b=191
-        c=$((c-256))
-      fi
-      echo 10.$b.$c.$GWID
-    done >> /etc/firewall.lihas.d/groups/hostgroup-gw$GWLID
-fi
+# Deploy FfsConfigGenerator results
+rsync -rlHpogDtvx --exclude etc/fastd etc /
+cd "$OLDPWD"
+
+setup_firewall
 
 # batman Namen
-for gw in $(seq 1 $GWS); do
-  ensureline "$(printf '02:00:0a:38:00:%02i gw%02i\n' $gw $gw)" /etc/bat-hosts
-  for seg in $(seq 1 $SEGMENTS); do
-    ensureline "$(printf '02:00:0a:38:%02i:%02i gw%02i-%i' $seg $gw $gw $seg)" /etc/bat-hosts
-  done
-done
+setup_batman_names
 
-cd "$OLDPWD"
 systemctl daemon-reload
 systemctl enable fastd@vpn00.service 
 systemctl enable alfred@bat00.service 
@@ -535,90 +210,13 @@ for seg in $(seq 1 $SEGMENTS); do
   systemctl enable alfred@vpn$(printf "%02i" $seg).service 
 done
 
-# fastd keys
-cat <<'EOF' >/usr/local/bin/fastd-update
-#!/bin/bash
-
-LC_ALL=C
-cd /etc/fastd/ffs-vpn/peers
-# Peers aktualisieren
-git pull | sed -n '/Already up-to-date./d; /^$/d
-/^ vpn[0-9]\{2\}/{s/ |.*//p}' | sort -u | while read a; do
-  [ ! -e $a ] && echo $a
-done  | sed 's#/.*##' | sort -u | while read vpninstance; do
-  systemctl restart fastd@$vpninstance
-done
-# fastd Config reload
-killall -HUP fastd
-EOF
-chmod +x /usr/local/bin/fastd-update
-cat <<'EOF' >/etc/cron.d/fastd-update 
-*/3 * * * * root /usr/local/bin/fastd-update
-EOF
-
-cat <<'EOF' >/usr/local/bin/fastd-status
-#!/usr/bin/perl
-use strict;
-use JSON::XS;
-use DBI;
-use Data::Dump qw(dump);
-my $DBFILE="/var/lib/misc/fastd-stats.sqlite";
-my $fastd_status_string = "";
-
-use IO::Socket::UNIX qw( SOCK_STREAM );
-
-$ARGV[0] or die("Usage: status.pl <socket>\n");
-
-my $socket = IO::Socket::UNIX->new(
-   Type => SOCK_STREAM,
-   Peer => $ARGV[0],
-) or die("Can't connect to server: $!\n");
-
-foreach my $line (<$socket>) {
-         $fastd_status_string .= $line;
-}
-
-my $dbh = DBI->connect("dbi:SQLite:dbname=$DBFILE","","");
-$dbh->do("CREATE TABLE IF NOT EXISTS fastd_last_connected (pubkey TEXT PRIMARY KEY ON CONFLICT REPLACE, time integer)");
-$dbh->do("CREATE TABLE IF NOT EXISTS fastd_mac (pubkey TEXT PRIMARY KEY ON CONFLICT REPLACE, mac TEXT)");
-$dbh->do("CREATE TABLE IF NOT EXISTS fastd_name (pubkey TEXT PRIMARY KEY ON CONFLICT REPLACE, name TEXT)");
-$dbh->do("CREATE TABLE IF NOT EXISTS fastd_gw (pubkey TEXT PRIMARY KEY ON CONFLICT REPLACE, gw TEXT)");
-my $time = time();
-my $sth_connected = $dbh->prepare("INSERT OR REPLACE INTO fastd_last_connected (pubkey,time) VALUES (?,?)");
-my $sth_mac = $dbh->prepare("INSERT OR REPLACE INTO fastd_mac (pubkey,mac) VALUES (?,?)");
-my $sth_get_mac = $dbh->prepare("SELECT * FROM fastd_mac WHERE pubkey=?");
-my $sth_name = $dbh->prepare("INSERT OR REPLACE INTO fastd_name (pubkey,name) VALUES (?,?)");
-my $sth_gw = $dbh->prepare("INSERT OR REPLACE INTO fastd_gw (pubkey,gw) VALUES (?,?)");
-
-my @fastd_status = decode_json($fastd_status_string);
-foreach my $peer ( keys (%{$fastd_status[0]{peers}})) {
-        if (defined($fastd_status[0]{peers}{$peer}{connection})) {
-                my $address = $fastd_status[0]{peers}{$peer}{address};
-                $address =~s/:[^:]*$//;
-                # print "$peer\t".$address."\t".$fastd_status[0]{peers}{$peer}{name}."\t".$fastd_status[0]{peers}{$peer}{connection}{mac_addresses}[0]."\n";
-                $sth_connected->execute($peer,$time);
-                $sth_mac->execute($peer,$fastd_status[0]{peers}{$peer}{connection}{mac_addresses}[0]);
-        } else {
-        }
-        $sth_name->execute($peer,$fastd_status[0]{peers}{$peer}{name});
-}
-
-my $sth = $dbh->prepare("SELECT name,mac FROM fastd_name JOIN fastd_last_connected ON fastd_name.pubkey=fastd_last_connected.pubkey JOIN fastd_mac ON fastd_name.pubkey=fastd_mac.pubkey WHERE time<(SELECT MAX(fastd_last_connected.time) FROM fastd_last_connected)");
-my ($mac, $name);
-$sth->execute();
-$sth->bind_columns(\$name,\$mac);
-while ( $sth->fetch ) {
-        print "$name\t$mac\n";
-}
-EOF
-chmod +x /usr/local/bin/fastd-status
+# fastd /usr/local/bin/fastd-update + cronjob
+setup_fastd_update
+# /usr/local/bin/fastd-status
+setup_fastd_status
 
 # sysfs
-ensureline "class/net/br00/bridge/hash_max = 4096" /etc/sysfs.d/freifunk
-ensureline "class/net/br01/bridge/hash_max = 4096" /etc/sysfs.d/freifunk
-ensureline "class/net/br02/bridge/hash_max = 4096" /etc/sysfs.d/freifunk
-ensureline "class/net/br03/bridge/hash_max = 4096" /etc/sysfs.d/freifunk
-ensureline "class/net/br04/bridge/hash_max = 4096" /etc/sysfs.d/freifunk
+system_setup_sysfs
 
 # DHCP Relay
 ensureline "SERVERS=\"$DHCPRELAYSERVERS\"" /etc/default/isc-dhcp-relay

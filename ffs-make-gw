@@ -6,7 +6,7 @@ export LC_ALL=C
 
 print_help() {
 cat <<EOF >&2
-usage: $0 --gwid N [--vpnkey=xxxx] [--no-systemd] [--no-apt-update] [--no-apt-key] [--othergw=172.21.16.1] [--directtcp="443[ 995][...]"] [--with-lihas-firewall] [--segments N] [--gws N] [--with-backbone-vpn]
+usage: $0 --gwid N [--vpnkey=xxxx] [--no-systemd] [--no-apt-update] [--no-apt-key] [--othergw=172.21.16.1] [--directtcp="443[ 995][...]"] [--with-lihas-firewall] [--segments N] [--gws N] [--with-backbone-vpn] [--no-log-call]
 Verwandelt einen Debian Jessie Server mit systemd in ein Freifunk-GW
 --help:          Dieser Text
 --name:          Gatewayname
@@ -22,17 +22,20 @@ Verwandelt einen Debian Jessie Server mit systemd in ein Freifunk-GW
 --segments:      Anzahl Segmente, Default 4
 --with-lihas-firewall: Installiere LiHAS Firewall fuer policy routing
 --with-backbone-vpn: Nimm das backbone-tinc, github-Schreibzugriff auf git+ssh://git@github.com/freifunk-stuttgart/tinc-ffsbb wird benoetigt
+--no-log-call:   Aufruf nicht unter /var/log/$0 speichern
 EOF
 }
+CONFIRM=1
 DHCPRELAYSERVERS="172.21.16.1 172.21.20.1"
-NEEDS_SYSTEMD=1
-NEEDS_APTUPDATE=1
-NEEDS_APTKEY=1
-OPT_FWLIHAS=0
 DIRECTTCP=""
-SEGMENTS=4
 GWS=10
 GWSUBID=""
+LOG_CALL=1
+NEEDS_APTKEY=1
+NEEDS_APTUPDATE=1
+NEEDS_SYSTEMD=1
+OPT_FWLIHAS=0
+SEGMENTS=4
 TINC_BB=0
 VPNKEY="Wird generiert"
 error() {
@@ -40,7 +43,7 @@ error() {
   echo "$*"
   exit 1
 }
-TEMP=`getopt -o h --long help,dhcp-relay-servers:,name:,ip:,gwid:,gwsubid:,gws:,vpnkey:,with-backbone-vpn,with-lihas-firewall,othergw:,directtcp:,no-systemd,no-apt-update,no-apt-key,segments: -- "$@"`
+TEMP=`getopt -o h --long help,dhcp-relay-servers:,name:,ip:,gwid:,gwsubid:,gws:,vpnkey:,with-backbone-vpn,with-lihas-firewall,othergw:,directtcp:,no-systemd,no-apt-update,no-apt-key,no-log-call,segments: -- "$@"`
 if [ $? != 0 ] ; then print_help >&2 ; exit 1 ; fi
 eval set -- "$TEMP"
 while true ; do
@@ -57,6 +60,8 @@ while true ; do
     --no-systemd)	NEEDS_SYSTEMD=0; shift 1;;
     --no-apt-update)	NEEDS_APTUPDATE=0; shift 1;;
     --no-apt-key)	NEEDS_APTKEY=0; shift 1;;
+    --no-log-call)	LOG_CALL=0; shift 1;;
+    --no-confirm)	CONFIRM=0; shift 1;;
     --with-backbone-vpn) TINC_BB=1; shift 1;;
     --segments)		SEGMENTS="$2"; shift 2;;
     --help|-h) print_help; exit 1;;
@@ -64,7 +69,7 @@ while true ; do
     *) echo "Unknown parameter $1, try -h" ; exit 1 ;;
   esac
 done
-
+echo "$*" >> "/var/log/$0"
 if [ x"$GWID" == "x" ]; then
 	echo "Keine GatewayID -> kein Gateway"
 	exit 1
@@ -79,6 +84,7 @@ EXT_IPS_V6=$(ip -6 a l dev $EXT_IF_V6 | sed -n '/inet6/{s/.*inet6 //; s/\/.*//; 
 cat <<EOF
 GatewayID (GWID): $GWID
 Gateway Long ID (GWLID): $GWLID
+Gateway Sub ID (GWLID): $GWSUBID
 Legacy Net IP (LEGIP): $LEGIP
 Externes Interface v4 (EXT_IF_V4): $EXT_IF_V4
 Externe IP v4 (EXT_IP_V4): $EXT_IP_V4
@@ -86,6 +92,10 @@ Externes Interface v6 (EXT_IF_V6): $EXT_IF_V6
 Externe IPs v6 (EXT_IP_V6): $EXT_IP_V6
 fastd VPN Key: $VPNKEY
 EOF
+if [ $CONFIRM -eq 1 ]; then
+	echo "Wenn alles richtig ist, Eingabe druecken, sonst Abbrechen mit Strg-C"
+	read x
+fi
 
 if ! dpkg -S /sbin/init | awk -F: '$1 != "systemd-sysv" {exit 1}' && [ $NEEDS_SYSTEMD -eq 1 ]; then
 	echo "/sbin/init is not systemd-sysv" >&2

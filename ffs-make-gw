@@ -100,9 +100,12 @@ fi
 . ensureline.sh
 . add_repositories.sh
 . setup_batman.sh
-. setup_system.sh
-. setup_interface.sh
 . setup_fastd.sh
+. setup_ffsconfiggenerator.sh
+. setup_firewall.sh
+. setup_interface.sh
+. setup_system.sh
+. setup_tinc.sh
 
 add_apt_repositories
 add_apt_preference

@@ -153,7 +153,7 @@ EOF
 fi
 
 # batadv-vis ist nicht in backports
-apt-get -y install resolvconf bind9 build-essential bridge-utils batman-adv-dkms git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip dnsmasq bind9 radvd conntrack $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas) isc-dhcp-relay apt-transport-https libjson-xs-perl libdata-dump-perl sysfsutils
+apt-get -y install resolvconf bind9 build-essential bridge-utils batman-adv-dkms git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip dnsmasq bind9 radvd conntrack $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas) isc-dhcp-relay apt-transport-https libjson-xs-perl libdata-dump-perl sysfsutils xinetd
 
 cat <<EOF
 ***********************************************************************
@@ -186,11 +186,20 @@ net.ipv4.ip_forward=1
 net.ipv6.conf.all.forwarding=1
 
 kernel.panic=3
+net.ipv4.conf.default.send_redirects=0
+net.ipv4.conf.all.send_redirects=0
+net.ipv4.conf.br00.send_redirects=0
+net.ipv4.conf.br01.send_redirects=0
+net.ipv4.conf.br02.send_redirects=0
+net.ipv4.conf.br03.send_redirects=0
+net.ipv4.conf.br04.send_redirects=0
+net.ipv4.conf.eth0.send_redirects=0
+net.ipv4.conf.lo.send_redirects=0
 net.ipv4.conf.default.arp_ignore=1
 net.ipv4.conf.all.arp_ignore=1
 net.ipv4.ip_forward=1
 net.ipv4.icmp_echo_ignore_broadcasts=1
-net.ipv4.icmp_ignore_bogus_error_responses=1
+net.ipv4.icmp_ignore_bogus_error_response==1
 net.ipv4.igmp_max_memberships=100
 net.ipv4.tcp_ecn=0
 net.ipv4.tcp_fin_timeout=30
@@ -427,6 +436,8 @@ if [ "x$OPT_FWLIHAS" == "x1" ]; then
     ensureline "0.0.0.0/0 0.0.0.0/0 udp $port" /etc/firewall.lihas.d/interface-$EXT_IF_V4/privclients
     ensureline "0.0.0.0/0 0.0.0.0/0 udp $port" /etc/firewall.lihas.d/interface-lo/privclients
   done
+  # monitoring from lenny.ua25.de
+  ensureline "88.198.194.43 0.0.0.0/0 tcp 6556" /etc/firewall.lihas.d/interface-$EXT_IF_V4/privclients
   ensureline "0.0.0.0/0 0.0.0.0/0 udp 67" /etc/firewall.lihas.d/interface-lo/privclients
   # Referenz Interface Freifunk
   mkdir -p /etc/firewall.lihas.d/interface-br00

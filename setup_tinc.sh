@@ -25,3 +25,25 @@ setup_tinc_key() {
     tincd -n ffsbb -K 4096
   fi
 }
+setup_tinc_git_push() {
+if [ x$TINC_BB == x1 ]; then
+  git add hosts/$HOSTNAME
+  git commit -m "hosts/$HOSTNAME"
+  git push
+fi
+}
+setup_tinc_interface() {
+cat <<EOF >/etc/network/interfaces.d/ffsbb
+allow-hotplug ffsbb
+auto ffsbb
+iface ffsbb inet static
+    tinc-net ffsbb
+    tinc-mlock yes
+    tinc-pidfile /var/run/tinc.ffsbb.pid
+    address 10.191.255.$(sed 's/gw0*//' <<<$HOSTNAME)/24    # Z.B. 10.191.255.10
+    netmask 255.255.255.0
+    broadcast 10.191.255.255
+    post-up         /sbin/ip rule add iif \$IFACE table stuttgart priority 7000 || true
+    pre-down        /sbin/ip rule del iif \$IFACE table stuttgart priority 7000 || true
+EOF
+}

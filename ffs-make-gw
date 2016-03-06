@@ -107,9 +107,11 @@ if [ ! -d /etc/apt/sources.list.d ]; then
 	mkdir -p /etc/apt/sources.list.d
 fi
 
-. ensureline.sh
 . add_repositories.sh
+. ensureline.sh
+. setup_alfred.sh
 . setup_batman.sh
+. setup_bird.sh
 . setup_fastd.sh
 . setup_ffsconfiggenerator.sh
 . setup_firewall.sh
@@ -120,41 +122,14 @@ fi
 add_apt_repositories
 add_apt_preference
 if [ x"$NEEDS_APTKEY" == x1 ]; then add_apt_keys fi
-
 if [ x"$NEEDS_APTUPDATE" == x1 ]; then apt-get update fi
 
 setup_batman_dkms
 
 # batadv-vis ist nicht in backports
-apt-get -y install resolvconf bind9 build-essential bridge-utils batman-adv-dkms git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip dnsmasq bind9 radvd conntrack $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas) isc-dhcp-relay apt-transport-https libjson-xs-perl libdata-dump-perl sysfsutils xinetd
+apt-get -y install resolvconf bind9 build-essential bridge-utils batman-adv-dkms git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip dnsmasq bind9 radvd conntrack $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas) isc-dhcp-relay apt-transport-https libjson-xs-perl libdata-dump-perl sysfsutils check-mk-agent jq xinetd 
 
-cat <<EOF
-***********************************************************************
-FIXME: sauberes init-Skript in alfred-Paket bauen
-#***********************************************************************
-EOF
-
-if [ ! -e /etc/systemd/system/alfred@.service ]; then
-  cat <<'EOF' >/etc/systemd/system/alfred@.service
-[Unit]
-Description=A.L.F.R.E.D
-After=network.target
-ConditionPathExists=/usr/sbin/alfred
-
-[Service]
-EnvironmentFile=/etc/default/alfred
-ExecStart=/usr/sbin/alfred -u /var/run/alfred-%I.sock -i %I -b %I --master
-ExecReload=/bin/kill -HUP $MAINPID
-KillMode=process
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-Alias=alfred.service
-EOF
-systemctl daemon-reload
-fi
-
+setup_alfred_startup
 setup_system_sysctl
 setup_system_routing
 setup_fastd
@@ -172,24 +147,8 @@ setup_tinc_key
 if [ x"$TINCBASE" != x"/etc/tinc/ffsbb" ]; then
     rsync -rlHpogDtSvx /etc/tinc/ffsbb/hosts/$HOSTNAME  $TINCBASE/ffsbb/hosts/
 fi
-if [ x$TINC_BB == x1 ]; then
-  git add hosts/$HOSTNAME
-  git commit -m "hosts/$HOSTNAME"
-  git push
-fi
-cat <<EOF >/etc/network/interfaces.d/ffsbb
-allow-hotplug ffsbb
-auto ffsbb
-iface ffsbb inet static
-    tinc-net ffsbb
-    tinc-mlock yes
-    tinc-pidfile /var/run/tinc.ffsbb.pid
-    address 10.191.255.$(sed 's/gw0*//' <<<$HOSTNAME)/24    # Z.B. 10.191.255.10
-    netmask 255.255.255.0
-    broadcast 10.191.255.255
-    post-up         /sbin/ip rule add iif \$IFACE table stuttgart priority 7000 || true
-    pre-down        /sbin/ip rule del iif \$IFACE table stuttgart priority 7000 || true
-EOF
+setup_tinc_git_push
+setup_tinc_interface
 
 if [ ! -d /etc/fastd/ffs-vpn/peers/.git ]; then
   mkdir -p /etc/fastd/ffs-vpn
@@ -235,8 +194,6 @@ system_setup_sysfs
 ensureline "SERVERS=\"$DHCPRELAYSERVERS\"" /etc/default/isc-dhcp-relay
 systemctl restart isc-dhcp-relay
 
-# Monitoring
-apt-get install check-mk-agent jq
 
 if [ x"$OPT_FWLIHAS" == x1 ]; then
   echo systemctl start firewall-lihas

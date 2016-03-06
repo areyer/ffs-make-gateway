@@ -92,4 +92,3 @@ setup_firewall() {
       done >> /etc/firewall.lihas.d/groups/hostgroup-gw$GWLID
   fi
 }
-}

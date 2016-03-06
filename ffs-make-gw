@@ -123,8 +123,8 @@ fi
 
 add_apt_repositories
 add_apt_preference
-if [ x"$NEEDS_APTKEY" == x1 ]; then add_apt_keys fi
-if [ x"$NEEDS_APTUPDATE" == x1 ]; then apt-get update fi
+if [ x"$NEEDS_APTKEY" == x1 ]; then add_apt_keys; fi
+if [ x"$NEEDS_APTUPDATE" == x1 ]; then apt-get update; fi
 
 setup_batman_dkms
 

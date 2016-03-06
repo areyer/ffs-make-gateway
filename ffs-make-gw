@@ -69,7 +69,9 @@ while true ; do
     *) echo "Unknown parameter $1, try -h" ; exit 1 ;;
   esac
 done
-echo "$*" >> "/var/log/$0"
+if [ $LOG_CALL -eq 1 ]; then
+  echo "$*" >> "/var/log/${0##*/}"
+fi
 if [ x"$GWID" == "x" ]; then
 	echo "Keine GatewayID -> kein Gateway"
 	exit 1

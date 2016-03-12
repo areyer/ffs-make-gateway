@@ -45,5 +45,8 @@ iface ffsbb inet static
     broadcast 10.191.255.255
     post-up         /sbin/ip rule add iif \$IFACE table stuttgart priority 7000 || true
     pre-down        /sbin/ip rule del iif \$IFACE table stuttgart priority 7000 || true
+    post-up         /sbin/ip route add 10.191.255.0/24 dev \$IFACE table stuttgart || true
+    post-down       /sbin/ip route del 10.191.255.0/24 dev \$IFACE table stuttgart || true
+
 EOF
 }

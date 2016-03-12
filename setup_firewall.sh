@@ -1,5 +1,6 @@
 setup_firewall() {
   if [ "x$OPT_FWLIHAS" == "x1" ]; then
+    mkdir -p /etc/firewall.lihas.d/interface-lo
     # Uplink VPN Interface
     mkdir -p /etc/firewall.lihas.d/interface-tun9
     # Externes Interface
@@ -13,6 +14,7 @@ setup_firewall() {
     # monitoring from lenny.ua25.de
     ensureline "88.198.194.43 0.0.0.0/0 tcp 6556" /etc/firewall.lihas.d/interface-$EXT_IF_V4/privclients
     ensureline "0.0.0.0/0 0.0.0.0/0 udp 67" /etc/firewall.lihas.d/interface-lo/privclients
+    ensureline "0.0.0.0/0 0.0.0.0/0 tcp 4242" /etc/firewall.lihas.d/interface-lo/privclients
     # Referenz Interface Freifunk
     mkdir -p /etc/firewall.lihas.d/interface-br00
     for i in $(seq 1 4); do
@@ -50,7 +52,6 @@ setup_firewall() {
     ensureline "0.0.0.0/0 0.0.0.0/0 icmp 3" /etc/firewall.lihas.d/interface-br00/privclients
     ensureline "0.0.0.0/0 0.0.0.0/0 icmp 4" /etc/firewall.lihas.d/interface-br00/privclients
     # Loopback, was lokale ausgehend ist
-    mkdir -p /etc/firewall.lihas.d/interface-lo
     if [ "x$OTHERGW_IP" != "x" ]; then
       mkdir -p /etc/firewall.lihas.d/policy-routing-othergw
         echo othergw > /etc/firewall.lihas.d/policy-routing-othergw/comment

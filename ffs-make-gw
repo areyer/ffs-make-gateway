@@ -141,6 +141,16 @@ ensureline "source-directory interfaces.d" /etc/network/interfaces
 # Legacy Segment
 setup_interface_seg00
 
+OLDDIR=$(pwd)
+mkdir -p /root/git
+cd /root/git
+# Patch and run FfsConfigGenerator
+setup_ffsconfiggenerator_config
+./gen_config.py --gwnum $GWID
+# Deploy FfsConfigGenerator results
+rsync -rlHpogDtvx --exclude etc/fastd etc /
+cd "$OLDPWD"
+
 TINCBASE=/etc/tinc/ffsbb
 setup_tinc_base
 cd $TINCBASE
@@ -159,18 +169,6 @@ fi
 setup_fastd_config
 setup_fastd_key
 
-OLDDIR=$(pwd)
-mkdir -p /root/git
-cd /root/git
-
-# Patch and run FfsConfigGenerator
-setup_ffsconfiggenerator_config
-./gen_config.py --gwnum $GWID
-
-# Deploy FfsConfigGenerator results
-rsync -rlHpogDtvx --exclude etc/fastd etc /
-cd "$OLDPWD"
-
 setup_firewall
 
 # batman Namen
@@ -181,7 +179,7 @@ systemctl enable fastd@vpn00.service
 systemctl enable alfred@bat00.service 
 for seg in $(seq 1 $SEGMENTS); do
   systemctl enable fastd@vpn$(printf "%02i" $seg).service 
-  systemctl enable alfred@vpn$(printf "%02i" $seg).service 
+  systemctl enable alfred@bat$(printf "%02i" $seg).service 
 done
 
 # fastd /usr/local/bin/fastd-update + cronjob

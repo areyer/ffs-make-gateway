@@ -17,7 +17,6 @@ net.ipv4.conf.default.arp_ignore=1
 net.ipv4.conf.all.arp_ignore=1
 net.ipv4.ip_forward=1
 net.ipv4.icmp_echo_ignore_broadcasts=1
-net.ipv4.icmp_ignore_bogus_error_response==1
 net.ipv4.igmp_max_memberships=100
 net.ipv4.tcp_ecn=0
 net.ipv4.tcp_fin_timeout=30
@@ -36,7 +35,6 @@ net.netfilter.nf_conntrack_max=1000000
 net.netfilter.nf_conntrack_tcp_timeout_established=7440
 net.netfilter.nf_conntrack_udp_timeout=60
 net.netfilter.nf_conntrack_udp_timeout_stream=180
-net.netfilter.nf_conntrack_skip_filter=1
 
 # disable bridge firewalling by default
 net.bridge.bridge-nf-call-arptables=0

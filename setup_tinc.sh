@@ -10,7 +10,7 @@ if [ ! -e /etc/tinc/ffsbb/subnet-up ]; then
     ln -s $TINCBASE/subnet-up.sample /etc/tinc/ffsbb/subnet-up
 fi
 if [ ! -e /etc/tinc/ffsbb/subnet-down ]; then
-    ln -s $TINCBASE/subnet-down.conf.sample /etc/tinc/ffsbb/subnet-down
+    ln -s $TINCBASE/subnet-down.sample /etc/tinc/ffsbb/subnet-down
 fi
 }
 setup_tinc_config() {
@@ -28,7 +28,7 @@ setup_tinc_key() {
 setup_tinc_git_push() {
 if [ x$TINC_BB == x1 ]; then
   git add hosts/$HOSTNAME
-  git commit -m "hosts/$HOSTNAME"
+  git commit -m "hosts/$HOSTNAME" || true
   git push
 fi
 }

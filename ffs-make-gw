@@ -175,6 +175,7 @@ setup_firewall
 setup_batman_names
 
 systemctl daemon-reload
+update-rc.d fastd disable
 systemctl enable fastd@vpn00.service 
 systemctl enable alfred@bat00.service 
 for seg in $(seq 1 $SEGMENTS); do
@@ -201,11 +202,11 @@ if [ x"$OPT_FWLIHAS" == x1 ]; then
   echo systemctl start firewall-lihas
 fi
 for i in $(seq 0 4); do
-  echo -n systemctl start fastd@vpn0$i.service"; "
+  echo -n systemctl start fastd@vpn$(printf "%02i" $seg).service"; "
 done
 echo
 for i in $(seq 0 4); do
-  echo -n systemctl start alfred@bat$i.service"; "
+  echo -n systemctl start alfred@bat$(printf "%02i" $seg).service"; "
 done
 echo
 echo systemctl start bird

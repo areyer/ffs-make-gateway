@@ -3,8 +3,7 @@ setup_fastd() {
     adduser --system --no-create-home fastd
   fi
 
-  if [ ! -e /etc/systemd/system/fastd@.service ]; then
-    cat <<'EOF' >/etc/systemd/system/fastd@.service
+  cat <<'EOF' >/etc/systemd/system/fastd@.service
 [Unit]
 Description=Fast and Secure Tunnelling Daemon (connection %I)
 After=network.target
@@ -15,14 +14,13 @@ ExecStartPre=/bin/mkdir -p /var/run/fastd
 ExecStartPre=/bin/chown fastd /var/run/fastd
 ExecStartPre=/bin/rm -f /var/run/fastd/fastd-%I.sock
 ExecStart=/usr/bin/fastd --syslog-level debug2 --syslog-ident fastd@%I -c /etc/fastd/%I/fastd.conf --pid-file /var/run/fastd/fastd-%I.pid --status-socket /var/run/fastd/fastd-%I.sock --user fastd
-ExecStop=/sbin/kill $(ps ax | awk '$5 ~ /\/usr\/bin\/fastd/ && $0 ~ /vpn00/ {print $1}')
-ExecReload=/bin/kill -HUP $MAINPID
-ExecStop=/bin/kill $MAINPID
+ExecStop=/sbin/kill $(cat /var/run/fastd/fastd-%I.pid)
+ExecReload=/bin/kill -HUP $(cat /var/run/fastd/fastd-%I.pid)
+ExecStop=/bin/kill $(cat /var/run/fastd/fastd-%I.pid)
 
 [Install]
 WantedBy=multi-user.target
 EOF
-  fi
 }
 setup_fastd_config() {
 for i in $(seq 0 4); do

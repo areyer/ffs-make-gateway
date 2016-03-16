@@ -194,6 +194,8 @@ system_setup_sysfs
 ensureline "SERVERS=\"$DHCPRELAYSERVERS\"" /etc/default/isc-dhcp-relay
 systemctl restart isc-dhcp-relay
 
+# bird
+setup_bird
 
 if [ x"$OPT_FWLIHAS" == x1 ]; then
   echo systemctl start firewall-lihas

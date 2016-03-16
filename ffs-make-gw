@@ -132,7 +132,6 @@ setup_batman_dkms
 # batadv-vis ist nicht in backports
 apt-get -y install resolvconf bind9 build-essential bridge-utils batman-adv-dkms git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip bind9 radvd conntrack $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas) isc-dhcp-relay apt-transport-https libjson-xs-perl libdata-dump-perl sysfsutils check-mk-agent jq xinetd bird
 
-setup_alfred_startup
 setup_system_sysctl
 setup_system_routing
 setup_fastd
@@ -151,6 +150,7 @@ setup_ffsconfiggenerator_config
 # Deploy FfsConfigGenerator results
 rsync -rlHpogDtvx --exclude etc/fastd etc /
 cd "$OLDPWD"
+setup_alfred_startup
 
 TINCBASE=/etc/tinc/ffsbb
 setup_tinc_base

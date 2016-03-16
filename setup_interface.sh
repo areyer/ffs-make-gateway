@@ -5,10 +5,10 @@ iface br00 inet static
         bridge_ports none
         bridge_fd 0
         bridge_maxwait 0
-  bridge_hw 02:00:0a:38:00:$GWLID
+	bridge_hw 02:00:0a:38:00:$GWLID
         address $LEGIP
         netmask 255.255.192.0
-  broadcast 172.21.63.255
+	broadcast 172.21.63.255
         # be sure all incoming traffic is handled by the appropriate rt_table
         post-up         /sbin/ip rule add iif \$IFACE table stuttgart priority 10000 || true
         pre-down        /sbin/ip rule del iif \$IFACE table stuttgart priority 10000 || true
@@ -30,8 +30,8 @@ iface br00 inet6 static
 allow-hotplug vpn00
 iface vpn00 inet6 manual
         pre-up          ip link set \$IFACE address 02:00:0a:38:00:$GWLID up || true
+        post-up         /sbin/ip link set dev \$IFACE up || true
         post-up         /usr/sbin/batctl -m bat00 if add \$IFACE || true
-        post-up         /sbin/ip link set dev bat00 up || true
 
 allow-hotplug bat00
 iface bat00 inet6 manual

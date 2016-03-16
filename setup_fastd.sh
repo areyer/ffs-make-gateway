@@ -45,7 +45,7 @@ $(for a in $EXT_IPS_V6; do echo bind [$a]:$VPNPORT\;; done)
 include "/etc/fastd/ffs-vpn/secret.conf";
 mtu 1406; # 1492 - IPv4/IPv6 Header - fastd Header...
 on verify "/root/freifunk/unclaimed.py";
-status socket "/var/run/fastd-vpn$VPNID.sock";
+status socket "/var/run/fastd/fastd-vpn$VPNID.sock";
 include peers from "/etc/fastd/ffs-vpn/peers/vpn$VPNID/peers";
 EOF
 done

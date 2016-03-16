@@ -15,13 +15,23 @@ setup_firewall() {
     ensureline "88.198.194.43 0.0.0.0/0 tcp 6556" /etc/firewall.lihas.d/interface-$EXT_IF_V4/privclients
     ensureline "0.0.0.0/0 0.0.0.0/0 udp 67" /etc/firewall.lihas.d/interface-lo/privclients
     ensureline "0.0.0.0/0 0.0.0.0/0 tcp 4242" /etc/firewall.lihas.d/interface-lo/privclients
+    # tinc geht zu irgend welchen Ports
+    ensureline "0.0.0.0/0 0.0.0.0/0 udp 0" /etc/firewall.lihas.d/interface-lo/privclients
+    ensureline "0.0.0.0/0 0.0.0.0/0 tcp 0" /etc/firewall.lihas.d/interface-lo/privclients
+    ensureline "0.0.0.0/0 0.0.0.0/0 icmp 0" /etc/firewall.lihas.d/interface-lo/privclients
     # Referenz Interface Freifunk
     mkdir -p /etc/firewall.lihas.d/interface-br00
     for i in $(seq 1 4); do
       if [ ! -e /etc/firewall.lihas.d/interface-br0$i ]; then
         ln -s /etc/firewall.lihas.d/interface-br00 /etc/firewall.lihas.d/interface-br0$i
       fi
+      if [ ! -e /etc/firewall.lihas.d/interface-bat0$i ]; then
+        ln -s /etc/firewall.lihas.d/interface-br00 /etc/firewall.lihas.d/interface-bat0$i
+      fi
     done
+    if [ ! -e /etc/firewall.lihas.d/interface-bat00 ]; then
+      ln -s /etc/firewall.lihas.d/interface-br00 /etc/firewall.lihas.d/interface-bat00
+    fi
     ensureline 172.21.0.0/16 /etc/firewall.lihas.d/interface-br00/network
     ensureline 10.190.0.0/15 /etc/firewall.lihas.d/interface-br00/network
     ensureline dhcpd /etc/firewall.lihas.d/interface-br00/mark
@@ -44,6 +54,10 @@ setup_firewall() {
         ensureline "IPT_FILTER '-A FORWARD -j ACCEPT -i br0$i -o br0$j'" /etc/firewall.lihas.d/localhost
       done
     done
+    ensureline "IPT_FILTER '-A INPUT -j ACCEPT -i ffsbb -p 2'" /etc/firewall.lihas.d/localhost
+    ensureline "IPT_FILTER '-A INPUT -j ACCEPT -i ffsbb -p 89'" /etc/firewall.lihas.d/localhost
+    ensureline "IPT_FILTER '-A OUTPUT -j ACCEPT -o ffsbb -p 2'" /etc/firewall.lihas.d/localhost
+    ensureline "IPT_FILTER '-A OUTPUT -j ACCEPT -o ffsbb -p 89'" /etc/firewall.lihas.d/localhost
     if [ "x$DIRECTTCP" != "x" ]; then
       for port in $DIRECTTCP; do
         ensureline "0.0.0.0/0 0.0.0.0/0 tcp $port" /etc/firewall.lihas.d/interface-br00/privclients

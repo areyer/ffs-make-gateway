@@ -5,12 +5,12 @@ FIXME: sauberes init-Skript in alfred-Paket bauen
 #***********************************************************************
 EOF
 
-if [ ! -e /etc/systemd/system/alfred@.service ]; then
   cat <<'EOF' >/etc/systemd/system/alfred@.service
 [Unit]
 Description=A.L.F.R.E.D
 After=network.target
 ConditionPathExists=/usr/sbin/alfred
+After=fastd@.service
 
 [Service]
 EnvironmentFile=/etc/default/alfred
@@ -23,6 +23,6 @@ Restart=on-failure
 WantedBy=multi-user.target
 Alias=alfred.service
 EOF
+sed -i 's/alfred-vpn/alfred@bat/' /etc/network/interfaces.d/ffs-seg*
 systemctl daemon-reload
-fi
 }

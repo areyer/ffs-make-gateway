@@ -40,4 +40,5 @@ Alias=batadv-vis@%I.service
 EOF
 sed -i 's/alfred-vpn/batadv-vis@/' /etc/network/interfaces.d/ffs-seg*
 systemctl daemon-reload
+systemctl enable alfred.service
 }

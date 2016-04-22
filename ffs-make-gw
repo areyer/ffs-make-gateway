@@ -3,6 +3,7 @@
 
 set -e
 export LC_ALL=C
+CALL="$*"
 
 print_help() {
 cat <<EOF >&2
@@ -15,6 +16,7 @@ Verwandelt einen Debian Jessie Server mit systemd in ein Freifunk-GW
 --dhcp-relay-servers: DHCP Relay Server die dieses GW benutzt, Default "172.21.16.1 172.21.20.1"
 --directtcp:     Liste der TCP-Ports die direkt ausgeleitet werden, durch Leerzeichen getrennt (Quoting nicht vergessen)
 --gws:           Maximale Anzahle Gateways, nur fuer batman Namensaufloesung, Default 10
+--gwsubid:       Gateway Sub-ID
 --no-apt-key:    keine neuen APT-Keys hinzufuegen
 --no-apt-update: apt-get update nicht ausfuehren
 --no-systemd:    Nicht aufd systemd bestehen, dann muss man alles int-Zeugs von hand machen
@@ -29,7 +31,7 @@ CONFIRM=1
 DHCPRELAYSERVERS="172.21.16.1 172.21.20.1"
 DIRECTTCP=""
 GWS=10
-GWSUBID=""
+GWSUBID="0"
 LOG_CALL=1
 NEEDS_APTKEY=1
 NEEDS_APTUPDATE=1
@@ -70,13 +72,14 @@ while true ; do
   esac
 done
 if [ $LOG_CALL -eq 1 ]; then
-  echo "$*" >> "/var/log/${0##*/}"
+  echo $CALL >> "/var/log/${0##*/}"
 fi
 if [ x"$GWID" == "x" ]; then
 	echo "Keine GatewayID -> kein Gateway"
 	exit 1
 fi
 GWLID=$(printf "%02i" $GWID)
+GWLSUBID=$(printf "%02i" $GWSUBID)
 LEGIP=172.21.$((4*$GWID)).1
 EXT_IF_V4=$(ip r l table main | sed -n '/default/{s/^.*dev //; s/ .*//; p}')
 EXT_IP_V4=$(ip r l table main | sed -n '/dev '$EXT_IF_V4' .*src/{ s/^.* src // ;s/ .*//; p}')
@@ -86,12 +89,12 @@ EXT_IPS_V6=$(ip -6 a l dev $EXT_IF_V6 | sed -n '/inet6/{s/.*inet6 //; s/\/.*//; 
 cat <<EOF
 GatewayID (GWID): $GWID
 Gateway Long ID (GWLID): $GWLID
-Gateway Sub ID (GWLID): $GWSUBID
+Gateway Sub ID (GWLSUBID): $GWLSUBID
 Legacy Net IP (LEGIP): $LEGIP
 Externes Interface v4 (EXT_IF_V4): $EXT_IF_V4
 Externe IP v4 (EXT_IP_V4): $EXT_IP_V4
 Externes Interface v6 (EXT_IF_V6): $EXT_IF_V6
-Externe IPs v6 (EXT_IP_V6): $EXT_IP_V6
+Externe IPs v6 (EXT_IP_V6): $EXT_IPS_V6
 fastd VPN Key: $VPNKEY
 EOF
 if [ $CONFIRM -eq 1 ]; then
@@ -127,11 +130,14 @@ add_apt_preference
 if [ x"$NEEDS_APTKEY" == x1 ]; then add_apt_keys; fi
 if [ x"$NEEDS_APTUPDATE" == x1 ]; then apt-get update; fi
 
-setup_batman_dkms
-
 # batadv-vis ist nicht in backports
-apt-get -y install resolvconf bind9 build-essential bridge-utils batman-adv-dkms git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip bind9 radvd conntrack $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas) isc-dhcp-relay apt-transport-https libjson-xs-perl libdata-dump-perl sysfsutils check-mk-agent jq xinetd bird
 
+printf 'isc-dhcp-relay\tisc-dhcp-relay/servers\tstring\t%s\n' "$DHCPRELAYSERVERS" | debconf-set-selections
+printf 'isc-dhcp-relay\tisc-dhcp-relay/interfaces\tstring\t\n' | debconf-set-selections
+printf 'isc-dhcp-relay\tisc-dhcp-relay/options\tstring\t-a\n' | debconf-set-selections
+apt-get -y install resolvconf bind9 build-essential bridge-utils git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip bind9 radvd conntrack $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas) isc-dhcp-relay apt-transport-https libjson-xs-perl libdata-dump-perl sysfsutils check-mk-agent jq xinetd bird equivs
+
+setup_batman_dkms
 setup_system_sysctl
 setup_system_routing
 setup_fastd
@@ -146,7 +152,7 @@ mkdir -p /root/git
 cd /root/git
 # Patch and run FfsConfigGenerator
 setup_ffsconfiggenerator_config
-./gen_config.py --gwnum $GWID
+./gen_config.py --gwnum $GWID --instance $GWSUBID
 # Deploy FfsConfigGenerator results
 rsync -rlHpogDtvx --exclude etc/fastd etc /
 cd "$OLDPWD"

@@ -20,6 +20,7 @@ EOF
     dpkg -i linux-headers-generic_$(uname -r)_all.deb
     rm -rf "$TMPDIR"
   fi
+  apt-get -y install batman-adv-dkms
 }
 
 setup_batman_names() {

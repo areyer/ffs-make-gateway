@@ -104,7 +104,7 @@ setup_firewall() {
           b=191
           c=$((c-256))
         fi
-        echo 10.$b.$c.$GWID
+        echo 10.$b.$c.$(($GWID*10+$GWSUBID))
       done >> /etc/firewall.lihas.d/groups/hostgroup-gw$GWLID
   fi
 }

@@ -12,7 +12,7 @@ After=network.target
 ConditionPathExists=/usr/sbin/alfred
 
 [Service]
-EnvironmentFile=/etc/default/alfred
+# EnvironmentFile=/etc/default/alfred
 ExecStart=/usr/sbin/alfred -u /var/run/alfred.sock -i br00,br01,br02,br03,br04 -b none --master
 ExecReload=/bin/kill -HUP $MAINPID
 KillMode=process
@@ -40,5 +40,6 @@ Alias=batadv-vis@%I.service
 EOF
 sed -i 's/alfred-vpn/batadv-vis@/' /etc/network/interfaces.d/ffs-seg*
 systemctl daemon-reload
-systemctl enable alfred.service
+echo Alfred disabled
+# systemctl enable alfred.service
 }

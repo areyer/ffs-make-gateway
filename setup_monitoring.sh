@@ -1,4 +1,6 @@
 setup_monitoring() {
+mkdir -p /etc/check_mk
+[ ! -e /etc/check_mk/mrpe.cfg ] && touch /etc/check_mk/mrpe.cfg
 sed -i '/^ffs-gw-dhcpsrv/d; /^ffs-vpn_batman/d' /etc/check_mk/mrpe.cfg
 ensureline "ffs-bird /etc/check_mk/ffs/ffs-bird" /etc/check_mk/mrpe.cfg
 ensureline "ffs-bird6 /etc/check_mk/ffs/ffs-bird6" /etc/check_mk/mrpe.cfg

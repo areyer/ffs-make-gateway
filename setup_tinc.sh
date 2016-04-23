@@ -18,7 +18,7 @@ setup_tinc_config() {
   ensureline "Digest = sha256" /etc/tinc/ffsbb/hosts/$HOSTNAME
   ensureline "ClampMSS = yes" /etc/tinc/ffsbb/hosts/$HOSTNAME
   ensureline "Address = $HOSTNAME.freifunk-stuttgart.de" /etc/tinc/ffsbb/hosts/$HOSTNAME
-  ensureline "Port = 119${HOSTNAME##gw}" /etc/tinc/ffsbb/hosts/$HOSTNAME
+  ensureline "Port = 119${GWLID}" /etc/tinc/ffsbb/hosts/$HOSTNAME
 }
 setup_tinc_key() {
   if [ ! -e /etc/tinc/rsa_key.priv ]; then
@@ -26,13 +26,15 @@ setup_tinc_key() {
   fi
   if [ ! -e /etc/tinc/ffsbb/rsa_key.priv ]; then
     cp /etc/tinc/rsa_key.priv /etc/tinc/ffsbb/
-    cat /etc/tinc/rsa_key.pub >> /root/git/tinc/ffsbb/hosts/$HOSTNAME
+  fi
+  if ! grep -q "BEGIN RSA PUBLIC KEY" /etc/tinc/ffsbb/hosts/$HOSTNAME; then
+    cat /etc/tinc/rsa_key.pub >> /etc/tinc/ffsbb/hosts/$HOSTNAME
   fi
 }
 setup_tinc_git_push() {
 if [ x$TINC_BB == x1 ]; then
   git add hosts/$HOSTNAME
-  git commit -m "hosts/$HOSTNAME" || true
+  git commit -m "hosts/$HOSTNAME" -a || true
   git push
 fi
 }
@@ -44,7 +46,7 @@ iface ffsbb inet static
     tinc-net ffsbb
     tinc-mlock yes
     tinc-pidfile /var/run/tinc.ffsbb.pid
-    address 10.191.255.$(sed 's/gw0*//' <<<$HOSTNAME)/24    # Z.B. 10.191.255.10
+    address 10.191.255.$(($GWID*10+$GWSUBID))
     netmask 255.255.255.0
     broadcast 10.191.255.255
     post-up         /sbin/ip rule add iif \$IFACE table stuttgart priority 7000 || true
@@ -55,12 +57,30 @@ iface ffsbb inet static
 EOF
 }
 setup_tinc_segments() {
-    mkdir -p /root/git
-    cd /root/git
+  OLDDIR=$(pwd)
+  mkdir -p /root/git
+  cd /root/git
+  if [ ! -d /root/git/tinc ]; then
     git clone git@github.com:freifunk-stuttgart/tinc.git
-    if [ ! -e /etc/tinc/rsa_key.priv ]; then
-        echo | tincd -K 4096
+  else
+    ( cd /root/git/tinc && git pull )
+  fi
+  cd $OLDPWD
+  if [ ! -e /etc/tinc/rsa_key.priv ]; then
+      echo | tincd -K 4096
+  fi
+
+  for net in ffsl2s00 ffsl2s01 ffsl2s02 ffsl2s03 ffsl2s04; do
+    ensureline "PMTUDiscovery = yes" /root/git/tinc/$net/hosts/$HOSTNAME
+    ensureline "Digest = sha256" /root/git/tinc/$net/hosts/$HOSTNAME
+    ensureline "ClampMSS = yes" /root/git/tinc/$net/hosts/$HOSTNAME
+    ensureline "Address = $HOSTNAME.freifunk-stuttgart.de" /root/git/tinc/$net/hosts/$HOSTNAME
+    ensureline "Port = 12${GWID}${GWLSUBID}" /root/git/tinc/$net/hosts/$HOSTNAME
+    if ! grep -q "BEGIN RSA PUBLIC KEY" /root/git/tinc/$net/hosts/$HOSTNAME; then
+      cat /etc/tinc/rsa_key.pub >> /root/git/tinc/$net/hosts/$HOSTNAME
     fi
+  done
+  mkdir -p /usr/local/bin
 cat <<'EOF' >/usr/local/bin/tinc-segments
 #/bin/bash
 for net in ffsl2s00 ffsl2s01 ffsl2s02 ffsl2s03 ffsl2s04; do

@@ -44,7 +44,7 @@ net.ipv6.conf.all.accept_ra=0
 net.ipv6.conf.default.accept_ra=0
 vm.panic_on_oom=1
 EOF
-sysctl -p /etc/sysctl.d/999-freifunk.conf
+sysctl -p /etc/sysctl.d/999-freifunk.conf || true
 }
 
 setup_system_routing() {

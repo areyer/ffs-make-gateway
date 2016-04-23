@@ -31,7 +31,7 @@ CONFIRM=1
 DHCPRELAYSERVERS="172.21.16.1 172.21.20.1"
 DIRECTTCP=""
 GWS=10
-GWSUBID="0"
+GWSUBID="1"
 LOG_CALL=1
 NEEDS_APTKEY=1
 NEEDS_APTUPDATE=1
@@ -71,6 +71,7 @@ while true ; do
     *) echo "Unknown parameter $1, try -h" ; exit 1 ;;
   esac
 done
+. ensureline.sh
 if [ $LOG_CALL -eq 1 ]; then
   echo $CALL >> "/var/log/${0##*/}"
 fi
@@ -80,16 +81,18 @@ if [ x"$GWID" == "x" ]; then
 fi
 GWLID=$(printf "%02i" $GWID)
 GWLSUBID=$(printf "%02i" $GWSUBID)
-LEGIP=172.21.$((4*$GWID)).1
+LEGIP=172.21.$((4*$GWID)).$GWSUBID
 EXT_IF_V4=$(ip r l table main | sed -n '/default/{s/^.*dev //; s/ .*//; p}')
-EXT_IP_V4=$(ip r l table main | sed -n '/dev '$EXT_IF_V4' .*src/{ s/^.* src // ;s/ .*//; p}')
+EXT_IP_V4=$(ip -4 a l dev $EXT_IF_V4 | sed -n '/ inet /{s/.*inet //; s/[\/ ].*//;p}')
 EXT_GW_V4=$(ip r l table main | sed -n '/default/{s/.*via //; s/ .*//; p}')
 EXT_IF_V6=$(ip -6 r l table main | sed -n '/default/{s/^.*dev //; s/ .*//; p}')
 EXT_IPS_V6=$(ip -6 a l dev $EXT_IF_V6 | sed -n '/inet6/{s/.*inet6 //; s/\/.*//; /fe80/d; p}')
+HOSTNAME=gw${GWLID}n${GWLSUBID}
 cat <<EOF
 GatewayID (GWID): $GWID
 Gateway Long ID (GWLID): $GWLID
 Gateway Sub ID (GWLSUBID): $GWLSUBID
+Hostname: $HOSTNAME
 Legacy Net IP (LEGIP): $LEGIP
 Externes Interface v4 (EXT_IF_V4): $EXT_IF_V4
 Externe IP v4 (EXT_IP_V4): $EXT_IP_V4
@@ -101,7 +104,19 @@ if [ $CONFIRM -eq 1 ]; then
 	echo "Wenn alles richtig ist, Eingabe druecken, sonst Abbrechen mit Strg-C"
 	read x
 fi
+hostname $HOSTNAME
+if ! grep -qw $HOSTNAME /etc/hosts; then
+	sed '/^127.0.0.1/{s/^/#/}' /etc/hosts
+	ensureline "127.0.0.1 ${HOSTNAME}.freifunk-stuttgart.de $HOSTNAME localhost" /etc/hosts
+fi
+if ! grep -qw $HOSTNAME /etc/hostname; then
+	echo $HOSTNAME > /etc/hostname
+fi
+export HOSTNAME
 
+show_progress() {
+	printf 'Status: %s - %s\n' "$(date)" "$1"
+}
 if ! dpkg -S /sbin/init | awk -F: '$1 != "systemd-sysv" {exit 1}' && [ $NEEDS_SYSTEMD -eq 1 ]; then
 	echo "/sbin/init is not systemd-sysv" >&2
 	echo "use --no-systemd to overwrite" >&2
@@ -113,7 +128,6 @@ if [ ! -d /etc/apt/sources.list.d ]; then
 fi
 
 . add_repositories.sh
-. ensureline.sh
 . setup_alfred.sh
 . setup_batman.sh
 . setup_bird.sh
@@ -137,49 +151,66 @@ printf 'isc-dhcp-relay\tisc-dhcp-relay/interfaces\tstring\t\n' | debconf-set-sel
 printf 'isc-dhcp-relay\tisc-dhcp-relay/options\tstring\t-a\n' | debconf-set-selections
 apt-get -y install resolvconf bind9 build-essential bridge-utils git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip bind9 radvd conntrack $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas) isc-dhcp-relay apt-transport-https libjson-xs-perl libdata-dump-perl sysfsutils check-mk-agent jq xinetd bird equivs
 
+show_progress setup_batman_dkms
 setup_batman_dkms
+show_progress setup_system_sysctl
 setup_system_sysctl
 setup_system_routing
+show_progress setup_system_routing
 setup_fastd
+show_progress setup_fastd
 
 # Networking
 ensureline "source-directory interfaces.d" /etc/network/interfaces
 # Legacy Segment
 setup_interface_seg00
+show_progress setup_interface_seg00
 
 OLDDIR=$(pwd)
 mkdir -p /root/git
 cd /root/git
 # Patch and run FfsConfigGenerator
 setup_ffsconfiggenerator_config
+show_progress setup_ffsconfiggenerator_config
 ./gen_config.py --gwnum $GWID --instance $GWSUBID
+show_progress ./gen_config.py --gwnum $GWID --instance $GWSUBID
 # Deploy FfsConfigGenerator results
 rsync -rlHpogDtvx --exclude etc/fastd etc /
 cd "$OLDPWD"
-setup_alfred_startup
 
 TINCBASE=/etc/tinc/ffsbb
 setup_tinc_base
+show_progress setup_tinc_base
 cd $TINCBASE
 setup_tinc_config
+show_progress setup_tinc_config
 setup_tinc_key
+show_progress setup_tinc_key
 if [ x"$TINCBASE" != x"/etc/tinc/ffsbb" ]; then
     rsync -rlHpogDtSvx /etc/tinc/ffsbb/hosts/$HOSTNAME  $TINCBASE/ffsbb/hosts/
 fi
 setup_tinc_git_push
+show_progress setup_tinc_git_push
 setup_tinc_interface
+show_progress setup_tinc_interface
+setup_tinc_segments
+show_progress setup_tinc_segments
 
 if [ ! -d /etc/fastd/ffs-vpn/peers/.git ]; then
   mkdir -p /etc/fastd/ffs-vpn
   git clone https://github.com/freifunk-stuttgart/peers-ffs /etc/fastd/ffs-vpn/peers
 fi
 setup_fastd_config
+show_progress setup_fastd_config
 setup_fastd_key
+show_progress setup_fastd_key
 
 setup_firewall
+show_progress setup_firewall
 
 # batman Namen
 setup_batman_names
+show_progress setup_batman_names
 
 systemctl daemon-reload
 update-rc.d fastd disable
@@ -187,14 +218,19 @@ systemctl enable fastd@vpn00.service
 for seg in $(seq 1 $SEGMENTS); do
   systemctl enable fastd@vpn$(printf "%02i" $seg).service 
 done
+setup_alfred_startup
+show_progress setup_alfred_startup
 
 # fastd /usr/local/bin/fastd-update + cronjob
 setup_fastd_update
+show_progress setup_fastd_update
 # /usr/local/bin/fastd-status
 setup_fastd_status
+show_progress setup_fastd_status
 
 # sysfs
 system_setup_sysfs
+show_progress system_setup_sysfs
 
 # DHCP Relay
 ensureline "SERVERS=\"$DHCPRELAYSERVERS\"" /etc/default/isc-dhcp-relay
@@ -202,9 +238,11 @@ systemctl restart isc-dhcp-relay
 
 # bird
 setup_bird
+show_progress setup_bird
 
 # Monitoring
 setup_monitoring
+show_progress setup_monitoring
 
 if [ x"$OPT_FWLIHAS" == x1 ]; then
   echo systemctl start firewall-lihas

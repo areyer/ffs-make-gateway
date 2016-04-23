@@ -25,9 +25,13 @@ EOF
 
 setup_batman_names() {
   for gw in $(seq 1 $GWS); do
-    ensureline "$(printf '02:00:0a:38:00:%02i gw%02i\n' $gw $gw)" /etc/bat-hosts
+  for subgw in $(seq 0 9); do
+    ensureline "$(printf '02:00:38:00:%02i:%02i mgw%02ii%02i\n' $gw $subgw $gw $subgw)" /etc/bat-hosts
+    ensureline "$(printf '02:00:35:00:%02i:%02i vgw%02ii%02i\n' $gw $subgw $gw $subgw)" /etc/bat-hosts
     for seg in $(seq 1 $SEGMENTS); do
-      ensureline "$(printf '02:00:0a:38:%02i:%02i gw%02i-%i' $seg $gw $gw $seg)" /etc/bat-hosts
+      ensureline "$(printf '02:00:38:%02i:%02i:%02i mgw%02ii%02i-%i' $seg $gw $subgw $gw $subgw $seg)" /etc/bat-hosts
+      ensureline "$(printf '02:00:35:%02i:%02i:%02i vgw%02ii%02i-%i' $seg $gw $subgw $gw $subgw $seg)" /etc/bat-hosts
     done
+  done
   done
 }

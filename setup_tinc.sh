@@ -80,7 +80,7 @@ setup_tinc_segments() {
     ensureline "Digest = sha256" /root/git/tinc/$net/hosts/$HOSTNAME
     ensureline "ClampMSS = yes" /root/git/tinc/$net/hosts/$HOSTNAME
     ensureline "Address = $HOSTNAME.freifunk-stuttgart.de" /root/git/tinc/$net/hosts/$HOSTNAME
-    ensureline "Port = 12${GWID}${seg}${GWSUBID}" /root/git/tinc/$net/hosts/$HOSTNAME
+    ensureline "Port = 12${GWID}$(printf '%02i' $seg)" /root/git/tinc/$net/hosts/$HOSTNAME
     if ! grep -q "BEGIN RSA PUBLIC KEY" /root/git/tinc/$net/hosts/$HOSTNAME; then
       cat /etc/tinc/rsa_key.pub >> /root/git/tinc/$net/hosts/$HOSTNAME
     fi

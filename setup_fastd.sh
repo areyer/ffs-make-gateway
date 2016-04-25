@@ -66,15 +66,17 @@ setup_fastd_update() {
   cat <<'EOF' >/usr/local/bin/fastd-update
 #!/bin/bash
 
-LC_ALL=C
-cd /etc/fastd/ffs-vpn/peers
-# Peers aktualisieren
-git pull | sed -n '/Already up-to-date./d; /^$/d
-/^ vpn[0-9]\{2\}/{s/ |.*//p}' | sort -u | while read a; do
-  [ ! -e $a ] && echo $a
-done  | sed 's#/.*##' | sort -u | while read vpninstance; do
+export LC_ALL=C
+cd /root/git/peers-ffs
+git pull >/dev/null
+#rsync -rlHpogDtSv --exclude="gw*" --exclude"=git" --delete --delete-excluded ./ /etc/fastd/ffs-vpn/peers/ 2>&1 |
+rsync -rlHpogDtSv --exclude"=.git" --delete --delete-excluded ./ /etc/fastd/ffs-vpn/peers/ 2>&1 |
+sed -n '/^deleting vpn/{s/^deleting //; s/\/.*//; p}' |
+sort -u |
+sed 's#/.*##' | sort -u | while read vpninstance; do
   systemctl restart fastd@$vpninstance
 done
+
 # fastd Config reload
 killall -HUP fastd
 EOF

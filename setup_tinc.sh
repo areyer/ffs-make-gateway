@@ -19,6 +19,10 @@ setup_tinc_config() {
   ensureline "ClampMSS = yes" /etc/tinc/ffsbb/hosts/$HOSTNAME
   ensureline "Address = $HOSTNAME.freifunk-stuttgart.de" /etc/tinc/ffsbb/hosts/$HOSTNAME
   ensureline "Port = 119${GWLID}" /etc/tinc/ffsbb/hosts/$HOSTNAME
+  if [ ! -e /etc/tinc/ffsbb/conf.d/$HOSTNAME ]; then
+    echo ConnectTo = $HOSTNAME > /etc/tinc/ffsbb/conf.d/$HOSTNAME
+    ( cd /etc/tinc/ffsbb && git add conf.d/$HOSTNAME )
+  fi
 }
 setup_tinc_key() {
   if [ ! -e /etc/tinc/rsa_key.priv ]; then
@@ -62,12 +66,12 @@ setup_tinc_segments() {
   cd /root/git
   if [ ! -d /root/git/tinc ]; then
     git clone git@github.com:freifunk-stuttgart/tinc.git
+    cd tinc
   else
-    ( cd /root/git/tinc && git pull )
+    cd /root/git/tinc && git pull
   fi
-  cd $OLDPWD
   if [ ! -e /etc/tinc/rsa_key.priv ]; then
-      echo | tincd -K 4096
+    echo | tincd -K 4096
   fi
 
   for net in ffsl2s00 ffsl2s01 ffsl2s02 ffsl2s03 ffsl2s04; do
@@ -79,7 +83,31 @@ setup_tinc_segments() {
     if ! grep -q "BEGIN RSA PUBLIC KEY" /root/git/tinc/$net/hosts/$HOSTNAME; then
       cat /etc/tinc/rsa_key.pub >> /root/git/tinc/$net/hosts/$HOSTNAME
     fi
+    mkdir -p /root/git/tinc/$net/conf.d
+    if [ ! -e /root/git/tinc/$net/conf.d/$HOSTNAME ]; then
+      echo ConnectTo = $HOSTNAME > /root/git/tinc/$net/conf.d/$HOSTNAME
+    fi
+    git add $net/hosts/$HOSTNAME $net/conf.d
+    git commit -m $HOSTNAME -a || true
+    git push
   done
+  for seg in $(seq 0 $SEGMENTS); do
+    net=$(printf "ffsl2s%02i" $seg)
+cat << EOF > /etc/network/interfaces.d/$net
+auto $net
+iface $net inet manual
+	tinc-net $net
+	tinc-mlock 1
+	tinc-pidfile /var/run/tinc.$net
+        pre-up          /sbin/modprobe batman_adv || true
+        pre-up          /sbin/ip link set $net address 02:00:37:$(printf "%02i" $seg):$GWLID:$GWLSUBID up || true
+        post-up         /sbin/ip link set dev $net up || true
+        post-up         /usr/sbin/batctl -m bat$(printf "%02i" $seg) if add $net || true
+
+EOF
+  done
+  cd $OLDPWD
+
   mkdir -p /usr/local/bin
 cat <<'EOF' >/usr/local/bin/tinc-segments
 #/bin/bash
@@ -88,6 +116,7 @@ for net in ffsl2s00 ffsl2s01 ffsl2s02 ffsl2s03 ffsl2s04; do
     mkdir /etc/tinc/$net
   fi
   rsync -rlHpogDtSvx --delete \
+    --exclude=rsa_key.priv \
     --exclude=tinc.conf \
     --exclude=subnet-up \
     --exclude=subnet-down \
@@ -103,8 +132,8 @@ for net in ffsl2s00 ffsl2s01 ffsl2s02 ffsl2s03 ffsl2s04; do
     if [ ! -e /etc/tinc/$net/rsa_key.priv ]; then
         cp /etc/tinc/rsa_key.priv /etc/tinc/$net/
     fi
-    if [ ! -e /root/git/tinc/ffsl2s00/hosts/$HOSTNAME ]; then
-        cp /etc/tinc/rsa_key.pub /root/git/tinc/ffsl2s00/hosts/$HOSTNAME
+    if [ ! -e /etc/tinc/$net/tinc.conf ]; then
+        ln -s /etc/tinc/$net/tinc.conf.sample /etc/tinc/$net/tinc.conf
     fi
 done
 }

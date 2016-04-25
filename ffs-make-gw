@@ -196,9 +196,11 @@ show_progress setup_tinc_interface
 setup_tinc_segments
 show_progress setup_tinc_segments
 
-if [ ! -d /etc/fastd/ffs-vpn/peers/.git ]; then
-  mkdir -p /etc/fastd/ffs-vpn
-  git clone https://github.com/freifunk-stuttgart/peers-ffs /etc/fastd/ffs-vpn/peers
+if [ ! -d /root/git/peers-ffs/.git ]; then
+  mkdir -p /root/git
+  git clone https://github.com/freifunk-stuttgart/peers-ffs /root/git/peers-ffs
+else
+  ( cd /root/git/peers-ffs && git pull )
 fi
 setup_fastd_config
 show_progress setup_fastd_config

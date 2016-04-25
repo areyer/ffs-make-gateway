@@ -7,10 +7,10 @@ setup_firewall() {
     mkdir -p /etc/firewall.lihas.d/interface-$EXT_IF_V4
     ensureline 0.0.0.0/0 /etc/firewall.lihas.d/interface-$EXT_IF_V4/network
     ensureline 0.0.0.0/0 /etc/firewall.lihas.d/interface-lo/network
-    for port in 10037 $(seq 10040 10044); do
-      ensureline "0.0.0.0/0 0.0.0.0/0 udp $port" /etc/firewall.lihas.d/interface-$EXT_IF_V4/privclients
-      ensureline "0.0.0.0/0 0.0.0.0/0 udp $port" /etc/firewall.lihas.d/interface-lo/privclients
-    done
+    ensureline "0.0.0.0/0 0.0.0.0/0 udp 10000:13000" /etc/firewall.lihas.d/interface-$EXT_IF_V4/privclients
+    ensureline "0.0.0.0/0 0.0.0.0/0 udp 10000:13000" /etc/firewall.lihas.d/interface-lo/privclients
+    ensureline "0.0.0.0/0 0.0.0.0/0 tcp 10000:13000" /etc/firewall.lihas.d/interface-$EXT_IF_V4/privclients
+    ensureline "0.0.0.0/0 0.0.0.0/0 tcp 10000:13000" /etc/firewall.lihas.d/interface-lo/privclients
     # monitoring from lenny.ua25.de
     ensureline "88.198.194.43 0.0.0.0/0 tcp 6556" /etc/firewall.lihas.d/interface-$EXT_IF_V4/privclients
     ensureline "0.0.0.0/0 0.0.0.0/0 udp 67" /etc/firewall.lihas.d/interface-lo/privclients

@@ -74,12 +74,13 @@ setup_tinc_segments() {
     echo | tincd -K 4096
   fi
 
-  for net in ffsl2s00 ffsl2s01 ffsl2s02 ffsl2s03 ffsl2s04; do
+  for seg in $(seq 0 $SEGMENTS); do
+    net=$(printf "ffsl2s%02i" $seg)
     ensureline "PMTUDiscovery = yes" /root/git/tinc/$net/hosts/$HOSTNAME
     ensureline "Digest = sha256" /root/git/tinc/$net/hosts/$HOSTNAME
     ensureline "ClampMSS = yes" /root/git/tinc/$net/hosts/$HOSTNAME
     ensureline "Address = $HOSTNAME.freifunk-stuttgart.de" /root/git/tinc/$net/hosts/$HOSTNAME
-    ensureline "Port = 12${GWID}${GWLSUBID}" /root/git/tinc/$net/hosts/$HOSTNAME
+    ensureline "Port = 12${GWID}${seg}${GWSUBID}" /root/git/tinc/$net/hosts/$HOSTNAME
     if ! grep -q "BEGIN RSA PUBLIC KEY" /root/git/tinc/$net/hosts/$HOSTNAME; then
       cat /etc/tinc/rsa_key.pub >> /root/git/tinc/$net/hosts/$HOSTNAME
     fi

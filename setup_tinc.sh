@@ -19,6 +19,7 @@ setup_tinc_config() {
   ensureline "ClampMSS = yes" /etc/tinc/ffsbb/hosts/$HOSTNAME
   ensureline "Address = $HOSTNAME.freifunk-stuttgart.de" /etc/tinc/ffsbb/hosts/$HOSTNAME
   ensureline "Port = 119${GWLID}" /etc/tinc/ffsbb/hosts/$HOSTNAME
+  ensureline "ConnectTo = $HOSTNAME" /etc/tinc/ffsbb/tinc.conf.sample
   if [ ! -e /etc/tinc/ffsbb/conf.d/$HOSTNAME ]; then
     echo ConnectTo = $HOSTNAME > /etc/tinc/ffsbb/conf.d/$HOSTNAME
     ( cd /etc/tinc/ffsbb && git add conf.d/$HOSTNAME )
@@ -81,13 +82,14 @@ setup_tinc_segments() {
     ensureline "ClampMSS = yes" /root/git/tinc/$net/hosts/$HOSTNAME
     ensureline "Address = $HOSTNAME.freifunk-stuttgart.de" /root/git/tinc/$net/hosts/$HOSTNAME
     ensureline "Port = 12${GWID}$(printf '%02i' $seg)" /root/git/tinc/$net/hosts/$HOSTNAME
+    ensureline "ConnectTo = $HOSTNAME" /root/git/tinc/$net/tinc.conf.sample
     if ! grep -q "BEGIN RSA PUBLIC KEY" /root/git/tinc/$net/hosts/$HOSTNAME; then
       cat /etc/tinc/rsa_key.pub >> /root/git/tinc/$net/hosts/$HOSTNAME
     fi
     mkdir -p /root/git/tinc/$net/conf.d
-    if [ ! -e /root/git/tinc/$net/conf.d/$HOSTNAME ]; then
-      echo ConnectTo = $HOSTNAME > /root/git/tinc/$net/conf.d/$HOSTNAME
-    fi
+#    if [ ! -e /root/git/tinc/$net/conf.d/$HOSTNAME ]; then
+#      echo ConnectTo = $HOSTNAME > /root/git/tinc/$net/conf.d/$HOSTNAME
+#    fi
     git add $net/hosts/$HOSTNAME $net/conf.d
   done
   git commit -m $HOSTNAME -a || true

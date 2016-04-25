@@ -88,9 +88,9 @@ setup_tinc_segments() {
       echo ConnectTo = $HOSTNAME > /root/git/tinc/$net/conf.d/$HOSTNAME
     fi
     git add $net/hosts/$HOSTNAME $net/conf.d
-    git commit -m $HOSTNAME -a || true
-    git push
   done
+  git commit -m $HOSTNAME -a || true
+  git push
   for seg in $(seq 0 $SEGMENTS); do
     net=$(printf "ffsl2s%02i" $seg)
 cat << EOF > /etc/network/interfaces.d/$net
@@ -99,8 +99,9 @@ iface $net inet manual
 	tinc-net $net
 	tinc-mlock 1
 	tinc-pidfile /var/run/tinc.$net
+	hwaddress	02:00:37:$(printf "%02i" $seg):$GWLID:$GWLSUBID
         pre-up          /sbin/modprobe batman_adv || true
-        pre-up          /sbin/ip link set $net address 02:00:37:$(printf "%02i" $seg):$GWLID:$GWLSUBID up || true
+        post-up         /sbin/ip link set $net address 02:00:37:$(printf "%02i" $seg):$GWLID:$GWLSUBID up || true
         post-up         /sbin/ip link set dev $net up || true
         post-up         /usr/sbin/batctl -m bat$(printf "%02i" $seg) if add $net || true
 
@@ -111,6 +112,8 @@ EOF
   mkdir -p /usr/local/bin
 cat <<'EOF' >/usr/local/bin/tinc-segments
 #/bin/bash
+cd /root/git/tinc
+git pull
 for net in ffsl2s00 ffsl2s01 ffsl2s02 ffsl2s03 ffsl2s04; do
   if [ ! -d /etc/tinc/$net ]; then
     mkdir /etc/tinc/$net
@@ -125,6 +128,7 @@ for net in ffsl2s00 ffsl2s01 ffsl2s02 ffsl2s03 ffsl2s04; do
     /root/git/tinc/$net/. \
     /etc/tinc/$net/
 done
+killall -HUP tincd
 EOF
 chmod +x /usr/local/bin/tinc-segments
 /usr/local/bin/tinc-segments

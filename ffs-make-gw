@@ -176,6 +176,7 @@ show_progress setup_ffsconfiggenerator_config
 show_progress ./gen_config.py --gwnum $GWID --instance $GWSUBID
 # Deploy FfsConfigGenerator results
 rsync -rlHpogDtvx --exclude etc/fastd etc /
+sed -i '/listen-on/d' /etc/bind/named.conf.options
 cd "$OLDPWD"
 
 TINCBASE=/etc/tinc/ffsbb
@@ -257,8 +258,13 @@ link_mtu=$3
 ifconfig_local_ip=$4
 ifconfig_remote_ip=$5
 method=$6
-
-ip route add default via $ifconfig_remote_ip table stuttgart || true
+grep "route-gateway $ifconfig_local_ip" /var/log/syslog | sed 's/^.*route-gateway //; s/,.*//' | tail -n1
+gw=$(egrep "route-gateway .*$ifconfig_local_ip" /var/log/syslog | sed 's/^.*route-gateway //; s/,.*//' | tail -n1)
+if [ "x$gw" != "x" ]; then
+  ip route add default via $gw table stuttgart || true
+else
+  ip route add default via $ifconfig_remote_ip table stuttgart || true
+fi
 EOF
 chmod +x /usr/local/bin/openvpn-freifunk
 

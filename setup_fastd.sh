@@ -69,8 +69,8 @@ setup_fastd_update() {
 export LC_ALL=C
 cd /root/git/peers-ffs
 git pull >/dev/null
-#rsync -rlHpogDtSv --exclude="gw*" --exclude"=git" --delete --delete-excluded ./ /etc/fastd/ffs-vpn/peers/ 2>&1 |
-rsync -rlHpogDtSv --exclude"=.git" --delete --delete-excluded ./ /etc/fastd/ffs-vpn/peers/ 2>&1 |
+#rsync -rlHpogDtSv --exclude"=.git" --delete --delete-excluded ./ /etc/fastd/ffs-vpn/peers/ 2>&1 |
+rsync -rlHpogDtSv --exclude="gw*" --exclude"=git" --delete --delete-excluded ./ /etc/fastd/ffs-vpn/peers/ 2>&1 |
 sed -n '/^deleting vpn/{s/^deleting //; s/\/.*//; p}' |
 sort -u |
 sed 's#/.*##' | sort -u | while read vpninstance; do

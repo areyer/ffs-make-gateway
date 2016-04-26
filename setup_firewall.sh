@@ -53,6 +53,8 @@ setup_firewall() {
       for j in $(seq 0 4); do
         ensureline "IPT_FILTER '-A FORWARD -j ACCEPT -i br0$i -o br0$j'" /etc/firewall.lihas.d/localhost
       done
+      ensureline "IPT_FILTER '-A FORWARD -j ACCEPT -i br0$i -o ffsbb'" /etc/firewall.lihas.d/localhost
+      ensureline "IPT_FILTER '-A FORWARD -j ACCEPT -o br0$i -i ffsbb'" /etc/firewall.lihas.d/localhost
     done
     ensureline "IPT_FILTER '-A FORWARD -j ACCEPT -i ffsbb -o ffsbb'" /etc/firewall.lihas.d/localhost
     ensureline "IPT_FILTER '-A INPUT -j ACCEPT -i ffsbb -p 2'" /etc/firewall.lihas.d/localhost

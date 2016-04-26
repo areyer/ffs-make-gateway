@@ -148,7 +148,7 @@ if [ x"$NEEDS_APTUPDATE" == x1 ]; then apt-get update; fi
 
 printf 'isc-dhcp-relay\tisc-dhcp-relay/servers\tstring\t%s\n' "$DHCPRELAYSERVERS" | debconf-set-selections
 printf 'isc-dhcp-relay\tisc-dhcp-relay/interfaces\tstring\t\n' | debconf-set-selections
-printf 'isc-dhcp-relay\tisc-dhcp-relay/options\tstring\t-a\n' | debconf-set-selections
+printf 'isc-dhcp-relay\tisc-dhcp-relay/options\tstring\t-q -a\n' | debconf-set-selections
 apt-get -y install resolvconf bind9 build-essential bridge-utils git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip bind9 radvd conntrack $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas) isc-dhcp-relay apt-transport-https libjson-xs-perl libdata-dump-perl sysfsutils check-mk-agent jq xinetd bird equivs
 
 show_progress setup_batman_dkms
@@ -245,6 +245,22 @@ show_progress setup_bird
 # Monitoring
 setup_monitoring
 show_progress setup_monitoring
+
+# Uplink VPN
+cat <<'EOF' >/usr/local/bin/openvpn-freifunk
+#!/bin/bash
+# cmd tun_dev tun_mtu link_mtu ifconfig_local_ip ifconfig_remote_ip [ init | restart ]
+cmd=$0
+tun_dev=$1
+tun_mtu=$2
+link_mtu=$3
+ifconfig_local_ip=$4
+ifconfig_remote_ip=$5
+method=$6
+
+ip route add default via $ifconfig_remote_ip table stuttgart || true
+EOF
+chmod +x /usr/local/bin/openvpn-freifunk
 
 if [ x"$OPT_FWLIHAS" == x1 ]; then
   echo systemctl start firewall-lihas

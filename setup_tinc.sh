@@ -131,7 +131,7 @@ for net in ffsl2s00 ffsl2s01 ffsl2s02 ffsl2s03 ffsl2s04; do
     /root/git/tinc/$net/. \
     /etc/tinc/$net/
 done
-killall -HUP tincd
+killall -HUP tincd || true
 EOF
 chmod +x /usr/local/bin/tinc-segments
 /usr/local/bin/tinc-segments

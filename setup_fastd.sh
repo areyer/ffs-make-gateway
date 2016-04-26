@@ -49,6 +49,7 @@ EOF
 done
 }
 setup_fastd_key() {
+mkdir -p /etc/fastd/ffs-vpn/peers
 if [ "$VPNKEY" == "Wird generiert" ] && [ ! -e /etc/fastd/ffs-vpn/secret.conf ]; then
   VPNKEY=$(fastd --generate-key --machine-readable)
   cat <<EOF >/etc/fastd/ffs-vpn/secret.conf

@@ -78,6 +78,9 @@ setup_firewall() {
         ensureline "0.0.0.0/0 0.0.0.0/0 udp 0 othergw" /etc/firewall.lihas.d/policy-routing
         ensureline "0.0.0.0/0 0.0.0.0/0 icmp 0 othergw" /etc/firewall.lihas.d/policy-routing
     fi
+    if [ ! -e /etc/firewall.lihas.d/policy-routing ]; then
+      touch /etc/firewall.lihas.d/policy-routing
+    fi
     if [ "x$DIRECTTCP" != "x" ]; then
       mkdir -p /etc/firewall.lihas.d/policy-routing-direct
         echo direct > /etc/firewall.lihas.d/policy-routing-direct/comment

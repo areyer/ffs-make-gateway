@@ -149,12 +149,14 @@ if [ x"$NEEDS_APTUPDATE" == x1 ]; then apt-get update; fi
 printf 'isc-dhcp-relay\tisc-dhcp-relay/servers\tstring\t%s\n' "$DHCPRELAYSERVERS" | debconf-set-selections
 printf 'isc-dhcp-relay\tisc-dhcp-relay/interfaces\tstring\t\n' | debconf-set-selections
 printf 'isc-dhcp-relay\tisc-dhcp-relay/options\tstring\t-q -a\n' | debconf-set-selections
-apt-get -y install resolvconf bind9 build-essential bridge-utils git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip bind9 radvd conntrack $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas) isc-dhcp-relay apt-transport-https libjson-xs-perl libdata-dump-perl sysfsutils check-mk-agent jq xinetd bird equivs
+apt-get -y install resolvconf bind9 build-essential bridge-utils git batctl fastd alfred alfred-json openvpn tinc vnstat vnstati python-pip bind9 radvd conntrack $([ "x$OPT_FWLIHAS" == "x1" ] && echo firewall-lihas) isc-dhcp-relay apt-transport-https libjson-xs-perl libdata-dump-perl sysfsutils check-mk-agent jq xinetd bird equivs socat
 
 show_progress setup_batman_dkms
 setup_batman_dkms
 show_progress setup_system_sysctl
 setup_system_sysctl
+show_progress setup_system_sysfs
+setup_system_sysfs
 setup_system_routing
 show_progress setup_system_routing
 setup_fastd

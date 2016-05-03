@@ -2,6 +2,8 @@ setup_system_sysctl() {
 cat <<EOF >/etc/sysctl.d/999-freifunk.conf
 net.ipv4.ip_forward=1
 net.ipv6.conf.all.forwarding=1
+net.ipv4.conf.default.rp_filter = 0
+net.ipv4.conf.all.rp_filter = 0
 
 kernel.panic=3
 net.ipv4.conf.default.send_redirects=0
@@ -45,6 +47,21 @@ net.ipv6.conf.default.accept_ra=0
 vm.panic_on_oom=1
 EOF
 sysctl -p /etc/sysctl.d/999-freifunk.conf || true
+}
+setup_system_sysfs() {
+cat <<EOF >/etc/sysfs.d/freifunk.conf
+class/net/br00/bridge/hash_max = 4096
+class/net/br01/bridge/hash_max = 4096
+class/net/br02/bridge/hash_max = 4096
+class/net/br03/bridge/hash_max = 4096
+class/net/br04/bridge/hash_max = 4096
+class/net/batbr00/bridge/hash_max = 4096
+class/net/batbr01/bridge/hash_max = 4096
+class/net/batbr02/bridge/hash_max = 4096
+class/net/batbr03/bridge/hash_max = 4096
+class/net/batbr04/bridge/hash_max = 4096
+EOF
+service sysfsutils restart
 }
 
 setup_system_routing() {

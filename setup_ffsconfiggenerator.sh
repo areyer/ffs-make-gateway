@@ -5,7 +5,7 @@ if [ ! -d FfsConfigGenerator ]; then
   cd FfsConfigGenerator
 else
   cd FfsConfigGenerator
-  git checkout -- config.js
+  git checkout -- config.json
   git pull
 fi
 python -c '

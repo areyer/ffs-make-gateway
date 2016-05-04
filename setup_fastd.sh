@@ -72,7 +72,7 @@ setup_fastd_bb() {
 	status socket "/var/run/fastd/fastd-bb$seg";
 	include peers from "/etc/fastd/ffs-vpn/peers/vpn$seg/bb";
 EOF
-    VPNBBPUB=$(fastd -c /etc/fastd/vpn$seg/fastd.conf --show-key --machine-readable)
+    VPNBBPUB=$(fastd -c /etc/fastd/bb$seg/fastd.conf --show-key --machine-readable)
     if [ ! -e /root/git/peers-ffs/vpn$seg/bb/$HOSTNAME ] || ! grep $VPNBBPUB /root/git/peers-ffs/vpn$seg/bb/$HOSTNAME; then
       cat <<-EOF >/root/git/peers-ffs/vpn$seg/bb/${HOSTNAME}s$seg
 	key "$VPNBBPUB";

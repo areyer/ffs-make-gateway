@@ -79,6 +79,15 @@ EOF
 	remote "${HOSTNAME}.freifunk-stuttgart.de" port $(printf '9%03i' $i);
 EOF
     fi
+    cat <<-EOF >/etc/network/interfaces.d/bb$seg
+	allow-hotplug bb$seg
+	iface bb$seg inet6 manual
+		hwaddress 02:00:0a:37:00:${GWLID}
+		pre-up		/sbin/modprobe batman_adv || true
+	        pre-up          /sbin/ip link set \$IFACE address 02:00:37:$seg:$GWLID:$GWLSUBID up || true
+	        post-up         /sbin/ip link set dev \$IFACE up || true
+	        post-up         /usr/sbin/batctl -m bat$seg if add \$IFACE || true
+EOF
   done
   (
     cd /root/git/peers-ffs

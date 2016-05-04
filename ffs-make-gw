@@ -196,8 +196,9 @@ setup_tinc_git_push
 show_progress setup_tinc_git_push
 setup_tinc_interface
 show_progress setup_tinc_interface
-setup_tinc_segments
-show_progress setup_tinc_segments
+# Disabled, fast bbNN macht das nun
+#setup_tinc_segments
+#show_progress setup_tinc_segments
 
 if [ ! -d /root/git/peers-ffs/.git ]; then
   mkdir -p /root/git
@@ -220,8 +221,10 @@ show_progress setup_batman_names
 systemctl daemon-reload
 update-rc.d fastd disable
 systemctl enable fastd@vpn00.service 
+systemctl enable fastd@bb00.service 
 for seg in $(seq 1 $SEGMENTS); do
   systemctl enable fastd@vpn$(printf "%02i" $seg).service 
+  systemctl enable fastd@bb$(printf "%02i" $seg).service 
 done
 setup_alfred_startup
 show_progress setup_alfred_startup
@@ -229,6 +232,8 @@ show_progress setup_alfred_startup
 # fastd /usr/local/bin/fastd-update + cronjob
 setup_fastd_update
 show_progress setup_fastd_update
+setup_fastd_bb
+show_progress setup_fastd_bb
 # /usr/local/bin/fastd-status
 setup_fastd_status
 show_progress setup_fastd_status
@@ -275,6 +280,7 @@ if [ x"$OPT_FWLIHAS" == x1 ]; then
 fi
 for i in $(seq 0 4); do
   echo -n systemctl start fastd@vpn$(printf "%02i" $seg).service"; "
+  echo -n systemctl start fastd@bb$(printf "%02i" $seg).service"; "
 done
 echo
 echo systemctl start bird

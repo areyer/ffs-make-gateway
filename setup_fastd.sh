@@ -48,6 +48,49 @@ include peers from "/etc/fastd/ffs-vpn/peers/vpn$VPNID/peers";
 EOF
 done
 }
+setup_fastd_bb() {
+  mkdir -p /etc/fastd
+  if [ ! -e /etc/fastd/fastdbb.key ]; then
+    VPNBBKEY=$(fastd --generate-key --machine-readable)
+    printf 'secret "%s";' $VPNBBKEY > /etc/fastd/fastdbb.key
+  else
+    VPNBBKEY=$(sed -n '/secret/{ s/.* "//; s/".*//; p}' /etc/fastd/fastdbb.key)
+  fi
+  for i in $(seq 0 $SEGMENTS); do
+    seg=$(printf '%02i' $i)
+    mkdir -p /etc/fastd/bb$seg
+    cat <<-EOF >/etc/fastd/bb$seg/fastd.conf
+	log to syslog level warn;
+	interface "bb$seg";
+	method "salsa2012+gmac";    # new method, between gateways for the moment (faster)
+	method "salsa2012+umac";  
+	bind $(printf '0.0.0.0:9%03i' $i);
+	bind $(printf '[::]:9%03i' $i);
+	include "/etc/fastd/fastdbb.key";
+	mtu 1406; # 1492 - IPv4/IPv6 Header - fastd Header...
+	on verify "/root/freifunk/unclaimed.py";
+	status socket "/var/run/fastd/fastd-bb$seg";
+	include peers from "/etc/fastd/ffs-vpn/peers/vpn$seg/bb";
+EOF
+    VPNBBPUB=$(fastd -c /etc/fastd/vpn$seg/fastd.conf --show-key --machine-readable)
+    if [ ! -e /root/git/peers-ffs/vpn$seg/bb/$HOSTNAME ] || ! grep $VPNBBPUB /root/git/peers-ffs/vpn$seg/bb/$HOSTNAME; then
+      cat <<-EOF >/root/git/peers-ffs/vpn$seg/bb/${HOSTNAME}s$seg
+	key "$VPNBBPUB";
+	remote "${HOSTNAME}.freifunk-stuttgart.de" port $(printf '9%03i' $i);
+EOF
+    fi
+  done
+  (
+    cd /root/git/peers-ffs
+    if LC_ALL=C git status | egrep -q "($HOSTNAME|ahead)"; then
+      git add .
+      git commit -m "bb $HOSTNAME" -a
+      git remote set-url origin git@github.com:freifunk-stuttgart/peers-ffs.git https://github.com/freifunk-stuttgart/peers-ffs
+      git push
+      git remote set-url origin https://github.com/freifunk-stuttgart/peers-ffs git@github.com:freifunk-stuttgart/peers-ffs.git
+    fi
+  )
+}
 setup_fastd_key() {
 mkdir -p /etc/fastd/ffs-vpn/peers
 if [ "$VPNKEY" == "Wird generiert" ] && [ ! -e /etc/fastd/ffs-vpn/secret.conf ]; then
@@ -70,8 +113,7 @@ setup_fastd_update() {
 export LC_ALL=C
 cd /root/git/peers-ffs
 git pull >/dev/null
-#rsync -rlHpogDtSv --exclude"=.git" --delete --delete-excluded ./ /etc/fastd/ffs-vpn/peers/ 2>&1 |
-rsync -rlHpogDtSv --exclude="gw*" --exclude"=git" --delete --delete-excluded ./ /etc/fastd/ffs-vpn/peers/ 2>&1 |
+rsync -rlHpogDtSv --exclude="peers/gw*" --exclude=".git" --delete --delete-excluded ./ /etc/fastd/ffs-vpn/peers/ 2>&1 |
 sed -n '/^deleting vpn/{s/^deleting //; s/\/.*//; p}' |
 sort -u |
 sed 's#/.*##' | sort -u | while read vpninstance; do
@@ -83,7 +125,7 @@ killall -HUP fastd
 EOF
   chmod +x /usr/local/bin/fastd-update
   cat <<'EOF' >/etc/cron.d/fastd-update 
-*/3 * * * * root /usr/local/bin/fastd-update
+*/5 * * * * root /usr/local/bin/fastd-update
 EOF
 }
 setup_fastd_status() {

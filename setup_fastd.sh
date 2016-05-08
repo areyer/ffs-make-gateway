@@ -23,29 +23,47 @@ WantedBy=multi-user.target
 EOF
 }
 setup_fastd_config() {
-for i in $(seq 0 4); do
-  VPNID=$(printf "%02i" $i)
-  if [ $i -eq 0 ]; then
-    VPNPORT=10037
-  else
-    VPNPORT=1004$i
+# Might do separate fastd for ipv4 and ipv6
+for ipv in ip4 ip6; do
+  if [ [ x$FASTD_SPLIT == x1 ] || [ $ipv == ip4 ] ]; then
+    for i in $(seq 0 4); do
+      seg=$(printf "%02i" $i)
+      if [ $i -eq 0 ]; then
+        VPNPORT=10037
+      else
+        VPNPORT=1004$i
+      fi
+      if [ $ipv == ip6 ]; then
+        dir=/etc/fastd/vpn${seg}ip6
+        cat <<-EOF >/etc/network/interfaces.d/vpn${seg}ip6
+		allow-hotplug vpn${seg}ip6
+		iface vpn${seg}ip6 inet6 manual
+			hwaddress 02:00:38:$seg:${GWLID}:$GWLSUBID
+			pre-up		/sbin/modprobe batman_adv || true
+		        pre-up          /sbin/ip link set \$IFACE address 02:00:35:$seg:$GWLID:$GWLSUBID up || true
+		        post-up         /sbin/ip link set dev \$IFACE up || true
+		        post-up         /usr/sbin/batctl -m bat$seg if add \$IFACE || true
+		EOF
+      else
+        dir=/etc/fastd/vpn$seg
+      fi
+      mkdir -p $dir
+      cat <<-EOF >$dir/fastd.conf
+	log to syslog level warn;
+	interface "vpn$seg";
+	method "salsa2012+gmac";    # new method, between gateways for the moment (faster)
+	method "salsa2012+umac";  
+	$(if [ [ x$FASTD_SPLIT == x ] || [ $ipv == ip4 ] ]; then for a in $EXT_IP_V4; do echo bind $a:$VPNPORT\;; done; fi)
+	$(if [ [ x$FASTD_SPLIT == x ] || [ $ipv == ip6 ] ]; then for a in $EXT_IPS_V6; do echo bind [$a]:$VPNPORT\;; done; fi)
+	
+	include "/etc/fastd/ffs-vpn/secret.conf";
+	mtu 1406; # 1492 - IPv4/IPv6 Header - fastd Header...
+	on verify "/root/freifunk/unclaimed.py";
+	status socket "/var/run/fastd/fastd-vpn$seg.sock";
+	include peers from "/etc/fastd/ffs-vpn/peers/vpn$seg/peers";
+	EOF
+    done
   fi
-  dir=/etc/fastd/vpn$VPNID
-  mkdir -p $dir
-  cat <<EOF >$dir/fastd.conf
-log to syslog level warn;
-interface "vpn$VPNID";
-method "salsa2012+gmac";    # new method, between gateways for the moment (faster)
-method "salsa2012+umac";  
-$(for a in $EXT_IP_V4; do echo bind $a:$VPNPORT\;; done)
-$(for a in $EXT_IPS_V6; do echo bind [$a]:$VPNPORT\;; done)
-
-include "/etc/fastd/ffs-vpn/secret.conf";
-mtu 1406; # 1492 - IPv4/IPv6 Header - fastd Header...
-on verify "/root/freifunk/unclaimed.py";
-status socket "/var/run/fastd/fastd-vpn$VPNID.sock";
-include peers from "/etc/fastd/ffs-vpn/peers/vpn$VPNID/peers";
-EOF
 done
 }
 setup_fastd_bb() {

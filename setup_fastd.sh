@@ -25,7 +25,7 @@ EOF
 setup_fastd_config() {
 # Might do separate fastd for ipv4 and ipv6
 for ipv in ip4 ip6; do
-  if [ [ x$FASTD_SPLIT == x1 ] || [ $ipv == ip4 ] ]; then
+  if [ x$FASTD_SPLIT == x1 ] || [ $ipv == ip4 ]; then
     for i in $(seq 0 4); do
       seg=$(printf "%02i" $i)
       if [ $i -eq 0 ]; then
@@ -44,22 +44,24 @@ for ipv in ip4 ip6; do
 		        post-up         /sbin/ip link set dev \$IFACE up || true
 		        post-up         /usr/sbin/batctl -m bat$seg if add \$IFACE || true
 		EOF
+        iface="vpn${seg}ip6"
       else
         dir=/etc/fastd/vpn$seg
+        iface="vpn${seg}"
       fi
       mkdir -p $dir
       cat <<-EOF >$dir/fastd.conf
 	log to syslog level warn;
-	interface "vpn$seg";
+	interface "$iface";
 	method "salsa2012+gmac";    # new method, between gateways for the moment (faster)
 	method "salsa2012+umac";  
-	$(if [ [ x$FASTD_SPLIT == x ] || [ $ipv == ip4 ] ]; then for a in $EXT_IP_V4; do echo bind $a:$VPNPORT\;; done; fi)
-	$(if [ [ x$FASTD_SPLIT == x ] || [ $ipv == ip6 ] ]; then for a in $EXT_IPS_V6; do echo bind [$a]:$VPNPORT\;; done; fi)
+	$(if [ x$FASTD_SPLIT == x ] || [ $ipv == ip4 ]; then for a in $EXT_IP_V4; do echo bind $a:$VPNPORT\;; done; fi)
+	$(if [ x$FASTD_SPLIT == x ] || [ $ipv == ip6 ]; then for a in $EXT_IPS_V6; do echo bind [$a]:$VPNPORT\;; done; fi)
 	
 	include "/etc/fastd/ffs-vpn/secret.conf";
 	mtu 1406; # 1492 - IPv4/IPv6 Header - fastd Header...
 	on verify "/root/freifunk/unclaimed.py";
-	status socket "/var/run/fastd/fastd-vpn$seg.sock";
+	status socket "/var/run/fastd/fastd-vpn${seg}ip6.sock";
 	include peers from "/etc/fastd/ffs-vpn/peers/vpn$seg/peers";
 	EOF
     done

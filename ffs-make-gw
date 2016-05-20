@@ -15,6 +15,7 @@ Verwandelt einen Debian Jessie Server mit systemd in ein Freifunk-GW
 --vpnkey:        use this fastd private key (string)
 --dhcp-relay-servers: DHCP Relay Server die dieses GW benutzt, Default "172.21.16.1 172.21.20.1"
 --directtcp:     Liste der TCP-Ports die direkt ausgeleitet werden, durch Leerzeichen getrennt (Quoting nicht vergessen)
+--fastdsplit:    2 fastd Instanzen pro Segment: IPv4 und IPv6 getrennt
 --gws:           Maximale Anzahle Gateways, nur fuer batman Namensaufloesung, Default 10
 --gwsubid:       Gateway Sub-ID
 --no-apt-key:    keine neuen APT-Keys hinzufuegen
@@ -45,7 +46,7 @@ error() {
   echo "$*"
   exit 1
 }
-TEMP=`getopt -o h --long help,dhcp-relay-servers:,name:,ip:,gwid:,gwsubid:,gws:,vpnkey:,with-backbone-vpn,with-lihas-firewall,othergw:,directtcp:,no-systemd,no-apt-update,no-apt-key,no-log-call,segments: -- "$@"`
+TEMP=`getopt -o h --long help,dhcp-relay-servers:,name:,ip:,gwid:,gwsubid:,gws:,vpnkey:,with-backbone-vpn,with-lihas-firewall,othergw:,directtcp:,no-systemd,no-apt-update,no-apt-key,no-log-call,segments:,fastdsplit -- "$@"`
 if [ $? != 0 ] ; then print_help >&2 ; exit 1 ; fi
 eval set -- "$TEMP"
 while true ; do
@@ -59,6 +60,7 @@ while true ; do
     --with-lihas-firewall) OPT_FWLIHAS=1; shift 1;;
     --othergw)		OTHERGW_IP=$2; shift 2;;
     --directtcp)	DIRECTTCP="$2"; shift 2;;
+    --fastdsplit)	FASTD_SPLIT="1"; shift 1;;
     --no-systemd)	NEEDS_SYSTEMD=0; shift 1;;
     --no-apt-update)	NEEDS_APTUPDATE=0; shift 1;;
     --no-apt-key)	NEEDS_APTKEY=0; shift 1;;
@@ -197,8 +199,9 @@ setup_tinc_git_push
 show_progress setup_tinc_git_push
 setup_tinc_interface
 show_progress setup_tinc_interface
-setup_tinc_segments
-show_progress setup_tinc_segments
+# Disabled, fast bbNN macht das nun
+#setup_tinc_segments
+#show_progress setup_tinc_segments
 
 if [ ! -d /root/git/peers-ffs/.git ]; then
   mkdir -p /root/git
@@ -221,8 +224,10 @@ show_progress setup_batman_names
 systemctl daemon-reload
 update-rc.d fastd disable
 systemctl enable fastd@vpn00.service 
+systemctl enable fastd@bb00.service 
 for seg in $(seq 1 $SEGMENTS); do
   systemctl enable fastd@vpn$(printf "%02i" $seg).service 
+  systemctl enable fastd@bb$(printf "%02i" $seg).service 
 done
 setup_alfred_startup
 show_progress setup_alfred_startup
@@ -230,6 +235,8 @@ show_progress setup_alfred_startup
 # fastd /usr/local/bin/fastd-update + cronjob
 setup_fastd_update
 show_progress setup_fastd_update
+setup_fastd_bb
+show_progress setup_fastd_bb
 # /usr/local/bin/fastd-status
 setup_fastd_status
 show_progress setup_fastd_status
@@ -276,6 +283,7 @@ if [ x"$OPT_FWLIHAS" == x1 ]; then
 fi
 for i in $(seq 0 4); do
   echo -n systemctl start fastd@vpn$(printf "%02i" $seg).service"; "
+  echo -n systemctl start fastd@bb$(printf "%02i" $seg).service"; "
 done
 echo
 echo systemctl start bird

@@ -180,7 +180,7 @@ show_progress setup_ffsconfiggenerator_config
 show_progress ./gen_config.py --gwnum $GWID --instance $GWSUBID
 # Deploy FfsConfigGenerator results
 rsync -rlHpogDtvx --exclude etc/fastd etc /
-sed -i "s/:$GWLID:00/:00:$GWLID:$GWLSUBID/g" /etc/network/interfaces.d/ffs-seg*
+sed -i "s/\([0-9a-f]\{2\}\):\([0-9a-f]\{2\}\):\([0-9a-f]\{2\}\):\([0-9a-f]\{2\}\):$GWLID:00/\1:\2:\3:\4:$GWLID:$GWLSUBID/" /etc/network/interfaces.d/ffs-seg*
 sed -i '/listen-on/d' /etc/bind/named.conf.options
 cd "$OLDPWD"
 

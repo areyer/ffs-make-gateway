@@ -212,5 +212,37 @@ while ( $sth->fetch ) {
         print "$name\t$mac\n";
 }
 EOF
-chmod +x /usr/local/bin/fastd-status
+    chmod +x /usr/local/bin/fastd-status
+    wget https://raw.githubusercontent.com/poldy79/FfsScripts/master/fastd-clean.py -O /usr/local/bin/fastd-clean.py
+    chmod +x /usr/local/bin/fastd-clean.py
+cat <<'EOF' >/usr/local/bin/fastd-status-export
+#!/bin/bash
+export LC_ALL=C
+TEMPDIR=$(mktemp -d /dev/shm/fastd-status-export.XXXXXXXXXX)
+FASTD_STATUS_OUTDIR='/var/www/html/fastd'
+if [ -e /etc/default/freifunk ]; then
+        . /etc/default/freifunk
+fi
+if [ ! -d "$FASTD_STATUS_OUTDIR" ]; then
+        if [ -e "$FASTD_STATUS_OUTDIR" ]; then
+                echo "'$FASTD_STATUS_OUTDIR' exists and is no directory" >&2
+                exit 1
+        fi
+        mkdir -p "$FASTD_STATUS_OUTDIR"
+fi
+
+# find all active fastd status sockets
+for fastdsocket in $(find /etc/fastd/ -name fastd.conf |
+xargs sed -n '/^status\s\+socket\s\+"/{s#^status\s\+socket\s\+"\([^"]\+\)";#\1#; p}'); do
+        if fuser -s $fastdsocket 2>/dev/null; then
+                # active fastd
+                fastdname=$(sed 's#^.*/##; s#^fastd-##; s#\.sock$##' <<<$fastdsocket)
+                fastd-clean.py -i <(socat "$fastdsocket" -) -o "$FASTD_STATUS_OUTDIR"/"$fastdname".json.new
+                mv "$FASTD_STATUS_OUTDIR"/"$fastdname".json.new "$FASTD_STATUS_OUTDIR"/"$fastdname".json
+        fi
+done
+EOF
+cat <<'EOF' >/etc/cron.d/freifunk
+* * * * * root /usr/local/bin/fastd-status-export
+EOF
 }

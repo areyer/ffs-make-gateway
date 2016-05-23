@@ -61,7 +61,7 @@ for ipv in ip4 ip6; do
 	include "/etc/fastd/ffs-vpn/secret.conf";
 	mtu 1406; # 1492 - IPv4/IPv6 Header - fastd Header...
 	on verify "/root/freifunk/unclaimed.py";
-	status socket "/var/run/fastd/fastd-vpn${seg}ip6.sock";
+	status socket "/var/run/fastd/fastd-vpn${seg}$(if [ x$FASTD_SPLIT == x ] && [ $ipv == ip6 ]; then echo ip6; fi).sock";
 	include peers from "/etc/fastd/ffs-vpn/peers/vpn$seg/peers";
 	EOF
     done

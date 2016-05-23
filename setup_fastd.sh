@@ -237,7 +237,7 @@ xargs sed -n '/^status\s\+socket\s\+"/{s#^status\s\+socket\s\+"\([^"]\+\)";#\1#;
         if fuser -s $fastdsocket 2>/dev/null; then
                 # active fastd
                 fastdname=$(sed 's#^.*/##; s#^fastd-##; s#\.sock$##' <<<$fastdsocket)
-                fastd-clean.py -i <(socat "$fastdsocket" -) -o "$FASTD_STATUS_OUTDIR"/"$fastdname".json.new
+                /usr/local/bin/fastd-clean.py -i <(socat "$fastdsocket" -) -o "$FASTD_STATUS_OUTDIR"/"$fastdname".json.new
                 mv "$FASTD_STATUS_OUTDIR"/"$fastdname".json.new "$FASTD_STATUS_OUTDIR"/"$fastdname".json
         fi
 done

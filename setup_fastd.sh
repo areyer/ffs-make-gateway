@@ -61,7 +61,7 @@ for ipv in ip4 ip6; do
 	include "/etc/fastd/ffs-vpn/secret.conf";
 	mtu 1406; # 1492 - IPv4/IPv6 Header - fastd Header...
 	on verify "/root/freifunk/unclaimed.py";
-	status socket "/var/run/fastd/fastd-vpn${seg}$(if [ x$FASTD_SPLIT == x ] && [ $ipv == ip6 ]; then echo ip6; fi).sock";
+	status socket "/var/run/fastd/fastd-vpn${seg}$(if [ x$FASTD_SPLIT != x ] && [ $ipv == ip6 ]; then echo ip6; fi).sock";
 	include peers from "/etc/fastd/ffs-vpn/peers/vpn$seg/peers";
 	EOF
     done
@@ -89,7 +89,7 @@ setup_fastd_bb() {
 	include "/etc/fastd/fastdbb.key";
 	mtu 1406; # 1492 - IPv4/IPv6 Header - fastd Header...
 	on verify "/root/freifunk/unclaimed.py";
-	status socket "/var/run/fastd/fastd-bb$seg";
+	status socket "/var/run/fastd/fastd-bb$seg.sock";
 	include peers from "/etc/fastd/ffs-vpn/peers/vpn$seg/bb";
 EOF
     VPNBBPUB=$(fastd -c /etc/fastd/bb$seg/fastd.conf --show-key --machine-readable)

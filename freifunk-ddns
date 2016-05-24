@@ -1,0 +1,123 @@
+#!/bin/bash
+export LC_ALL=C
+NSUPDATE=nsupdate
+TIMEOUT=300
+DDNS_KEYFILE=/etc/bind/keys/Kgw05.freifunk-stuttgart.de.+165+50977.key
+DDNS_SERVER=dns1.lihas.de
+DDNS_DOMAIN=freifunk-stuttggart.de
+DDNS_HOSTBASE=gw05
+FFS_SEGEMNTS=4
+DOIPV4=1
+DOIPV6=1
+SEGMENTS=""
+GW_INSTANCE=""
+
+OPTS="-k $DDNS_KEYFILE -t $TIMEOUT"
+if [ -e /etc/default/freifunk ]; then
+	. /etc/default/freifunk
+fi
+
+print_help() {
+cat <<-EOF >&2
+$0 [--check] [--nov4] [--nov6] [--segments=N[,M[,...]]] [--gwnum=NN]
+	--help:		This text
+	--check:	check our segments
+	--delete:	delete the IP from the GW/Segment
+	--add:		delete the IP to the GW/Segment
+	--nov4:		don't operate on ip v4 (default: v4 and v6)
+	--nov6:		don't operate on ip v6 (default: v4 and v6)
+	--gwnum:	gwNN instead of $DDNS_HOSTBASE
+	--segments:	segements to operate on, default all
+EOF
+}
+TEMP=`getopt -o h --long help,check,add,delete,ipv4:,ipv6:,nov4,nov6,segments:,gwnum: -- "$@"`
+if [ $? != 0 ] ; then print_help >&2 ; exit 1 ; fi
+eval set -- "$TEMP"
+while true ; do
+	case "$1" in
+		--help)		print_help; exit 1;;
+		--check)	ACTION=CHECK; shift 1;;
+		--add)		ACTION=ADD; shift 1;;
+		--delete)	ACTION=DELETE; shift 1;;
+		--ipv4)		GW_V4=$2; shift 2;;
+		--ipv6)		GW_V6=$2; shift 2;;
+		--nov4)		DOIPV4=0; shift 1;;
+		--nov6)		DOIPV6=0; shift 1;;
+		--segments)	SEGMENTS=$(sed 's/,/ /g' <<<$2); shift 2;;
+		--gwnum)	DDNS_HOSTBASE=$(printf 'gw%02i' $2); shift 2;;
+		--gwinstance)	GW_INSTANCE=$(printf '%02i' $2); shift 2;;
+		--) shift ; break ;;
+		*) echo "Unknown parameter $1, try -h" ; exit 1 ;;
+	esac
+done
+
+if [ x"$SEGMENTS" == x ]; then
+	SEGMENTS="$(for i in $(seq 0 $FFS_SEGEMNTS); do echo $i\ ; done)"
+fi
+if [ x"$GW_V4" == x ]; then
+	DOIPV4=0
+fi
+if [ x"$GW_V6" == x ]; then
+	DOIPV6=0
+fi
+
+case $ACTION in
+	CHECK)
+		for s in $SEGMENTS; do
+			seg=$(printf '%02i' $s)
+			if [ $s -eq 0 ]; then
+				if [ $DOIPV4 -eq 1 ]; then printf '% 8s\t%s\n' ${DDNS_HOSTBASE} $(dig +short ${DDNS_HOSTBASE}.${DDNS_DOMAIN}. -t A | grep -w "$GW_V4"); fi
+				if [ $DOIPV6 -eq 1 ]; then printf '% 8s\t%s\n' ${DDNS_HOSTBASE} $(dig +short ${DDNS_HOSTBASE}.${DDNS_DOMAIN}. -t AAAA | grep -w "$GW_V6"); fi
+			fi
+			if [ $DOIPV4 -eq 1 ]; then printf '% 8s\t%s\n' ${DDNS_HOSTBASE}s$seg $(dig +short ${DDNS_HOSTBASE}s$seg.${DDNS_DOMAIN}. -t A | grep -w "$GW_V4"); fi
+			if [ $DOIPV6 -eq 1 ]; then printf '% 8s\t%s\n' ${DDNS_HOSTBASE}s$seg $(dig +short ${DDNS_HOSTBASE}s$seg.${DDNS_DOMAIN}. -t AAAA | grep -w "$GW_V6"); fi
+		done;;
+	ADD)
+		cat <<-EOF | $NSUPDATE $OPTS
+			server $DDNS_SERVER
+			$(for s in $SEGMENTS; do
+				seg=$(printf '%02i' $s)
+				if [ $DOIPV4 -eq 1 ]; then
+					if [ $s -eq 0 ]; then echo "add ${DDNS_HOSTBASE}.${DDNS_DOMAIN}. 300 IN A $GW_V4"; fi
+					echo "add ${DDNS_HOSTBASE}s$seg.${DDNS_DOMAIN}. 300 IN A $GW_V4"
+				fi
+				if [ $DOIPV6 -eq 1 ]; then
+					if [ $s -eq 0 ]; then echo "add ${DDNS_HOSTBASE}.${DDNS_DOMAIN}. 300 IN AAAA $GW_V6"; fi
+					echo "add ${DDNS_HOSTBASE}s$seg.${DDNS_DOMAIN}. 300 IN AAAA $GW_V6"
+				fi
+			done)
+			send
+		EOF
+		;;
+	DELETE)
+		cat <<-EOF | $NSUPDATE $OPTS
+			server $DDNS_SERVER
+			$(for s in $SEGMENTS; do
+				seg=$(printf '%02i' $s)
+				if [ $DOIPV4 -eq 1 ]; then
+					if [ $s -eq 0 ]; then echo "delete ${DDNS_HOSTBASE}.${DDNS_DOMAIN}. A $GW_V4"; fi
+					echo "delete ${DDNS_HOSTBASE}s$seg.${DDNS_DOMAIN}. A $GW_V4"
+				fi
+				if [ $DOIPV6 -eq 1 ]; then
+					if [ $s -eq 0 ]; then echo "delete ${DDNS_HOSTBASE}.${DDNS_DOMAIN}. AAAA $GW_V6"; fi
+					echo "delete ${DDNS_HOSTBASE}s$seg.${DDNS_DOMAIN}. AAAA $GW_V6"
+				fi
+			done)
+			send
+		EOF
+		;;
+	*) echo "Unknown action $1, try -h" ; exit 1 ;;
+esac
+exit 0
+cat <<EOF | $NSUPDATE $OPTS
+server $SERVER_A
+update delete $NAME
+send
+update add $NAME $TTL A $IP
+send
+server $SERVER_PTR
+update delete $IPREV
+send
+update add $IPREV. $TTL PTR $NAME.
+send 
+EOF

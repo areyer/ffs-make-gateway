@@ -11,6 +11,8 @@ setup_firewall() {
     ensureline "0.0.0.0/0 0.0.0.0/0 udp 9000:13000" /etc/firewall.lihas.d/interface-lo/privclients
     ensureline "0.0.0.0/0 0.0.0.0/0 tcp 9000:13000" /etc/firewall.lihas.d/interface-$EXT_IF_V4/privclients
     ensureline "0.0.0.0/0 0.0.0.0/0 tcp 9000:13000" /etc/firewall.lihas.d/interface-lo/privclients
+    ensureline "0.0.0.0/0 0.0.0.0/0 tcp 9000:13000" /etc/firewall.lihas.d/interface-$EXT_IF_V4/privclients
+    ensureline "0.0.0.0/0 0.0.0.0/0 tcp 80" /etc/firewall.lihas.d/interface-$EXT_IF_V4/privclients
     # monitoring from lenny.ua25.de
     ensureline "88.198.194.43 0.0.0.0/0 tcp 6556" /etc/firewall.lihas.d/interface-$EXT_IF_V4/privclients
     ensureline "0.0.0.0/0 0.0.0.0/0 udp 67" /etc/firewall.lihas.d/interface-lo/privclients

@@ -61,7 +61,7 @@ for ipv in ip4 ip6; do
 	include "/etc/fastd/ffs-vpn/secret.conf";
 	mtu 1406; # 1492 - IPv4/IPv6 Header - fastd Header...
 	on verify "/root/freifunk/unclaimed.py";
-	status socket "/var/run/fastd/fastd-vpn${seg}ip6.sock";
+	status socket "/var/run/fastd/fastd-vpn${seg}$(if [ x$FASTD_SPLIT != x ] && [ $ipv == ip6 ]; then echo ip6; fi).sock";
 	include peers from "/etc/fastd/ffs-vpn/peers/vpn$seg/peers";
 	EOF
     done
@@ -89,7 +89,7 @@ setup_fastd_bb() {
 	include "/etc/fastd/fastdbb.key";
 	mtu 1406; # 1492 - IPv4/IPv6 Header - fastd Header...
 	on verify "/root/freifunk/unclaimed.py";
-	status socket "/var/run/fastd/fastd-bb$seg";
+	status socket "/var/run/fastd/fastd-bb$seg.sock";
 	include peers from "/etc/fastd/ffs-vpn/peers/vpn$seg/bb";
 EOF
     VPNBBPUB=$(fastd -c /etc/fastd/bb$seg/fastd.conf --show-key --machine-readable)
@@ -212,5 +212,37 @@ while ( $sth->fetch ) {
         print "$name\t$mac\n";
 }
 EOF
-chmod +x /usr/local/bin/fastd-status
+    chmod +x /usr/local/bin/fastd-status
+    wget https://raw.githubusercontent.com/poldy79/FfsScripts/master/fastd-clean.py -O /usr/local/bin/fastd-clean.py
+    chmod +x /usr/local/bin/fastd-clean.py
+cat <<'EOF' >/usr/local/bin/fastd-status-export
+#!/bin/bash
+export LC_ALL=C
+TEMPDIR=$(mktemp -d /dev/shm/fastd-status-export.XXXXXXXXXX)
+FASTD_STATUS_OUTDIR='/var/www/html/fastd'
+if [ -e /etc/default/freifunk ]; then
+        . /etc/default/freifunk
+fi
+if [ ! -d "$FASTD_STATUS_OUTDIR" ]; then
+        if [ -e "$FASTD_STATUS_OUTDIR" ]; then
+                echo "'$FASTD_STATUS_OUTDIR' exists and is no directory" >&2
+                exit 1
+        fi
+        mkdir -p "$FASTD_STATUS_OUTDIR"
+fi
+
+# find all active fastd status sockets
+for fastdsocket in $(find /etc/fastd/ -name fastd.conf |
+xargs sed -n '/^status\s\+socket\s\+"/{s#^status\s\+socket\s\+"\([^"]\+\)";#\1#; p}'); do
+        if fuser -s $fastdsocket 2>/dev/null; then
+                # active fastd
+                fastdname=$(sed 's#^.*/##; s#^fastd-##; s#\.sock$##' <<<$fastdsocket)
+                /usr/local/bin/fastd-clean.py -i <(socat "$fastdsocket" -) -o "$FASTD_STATUS_OUTDIR"/"$fastdname".json.new
+                mv "$FASTD_STATUS_OUTDIR"/"$fastdname".json.new "$FASTD_STATUS_OUTDIR"/"$fastdname".json
+        fi
+done
+EOF
+cat <<'EOF' >/etc/cron.d/freifunk
+* * * * * root /usr/local/bin/fastd-status-export
+EOF
 }

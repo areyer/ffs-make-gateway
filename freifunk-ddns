@@ -109,15 +109,3 @@ case $ACTION in
 	*) echo "Unknown action $1, try -h" ; exit 1 ;;
 esac
 exit 0
-cat <<EOF | $NSUPDATE $OPTS
-server $SERVER_A
-update delete $NAME
-send
-update add $NAME $TTL A $IP
-send
-server $SERVER_PTR
-update delete $IPREV
-send
-update add $IPREV. $TTL PTR $NAME.
-send 
-EOF

@@ -10,6 +10,7 @@ setup_batman_dkms() {
     sed -i '
       s/^Package:.*/Package: linux-headers-generic/
       s/^# Version:.*/Version: '"$(uname -r)"'/
+      s/^# Maintainer:.*/Maintainer: ffs-make-gateway <freifunk@lihas.de>/
       /^Description/,$d
     ' $TMPDIR/linux-headers-generic
     cat <<EOF >>$TMPDIR/linux-headers-generic

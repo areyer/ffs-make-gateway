@@ -59,6 +59,10 @@ iface ffsbb inet static
     post-up         /sbin/ip route add 10.191.255.0/24 dev \$IFACE table stuttgart || true
     post-down       /sbin/ip route del 10.191.255.0/24 dev \$IFACE table stuttgart || true
 
+iface ffsbb inet6 static
+    address fd21:b4dc:4b00::a38:$(($GWID*10+$GWSUBID))
+    netmask 64
+
 EOF
 }
 setup_tinc_segments() {

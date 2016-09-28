@@ -26,8 +26,8 @@ TINC_PID=$(ps x | awk '$5 ~ /tincd$/ && /-n ffsbb/ {print $1}')
 if [ 'x'"$TINC_PID" == 'x' ]; then
         # no tinc, restart
         error "tinc ffsbb down, restart"
-        ifdown --force ffsbb
-        ifup ffsbb
+        /sbin/ifdown --force ffsbb
+        /sbin/ifup ffsbb
 fi
 # check interfaces
 # 'auto'-interfaces must be present
@@ -51,8 +51,8 @@ for iface in $INTERFACES; do
                         ;;
         esac
         if ! ip l l dev $iface | egrep -q 'state (UP|UNKNOWN)'; then
-                ifdown --force $iface
-                ifup $iface
+                /sbin/ifdown --force $iface
+                /sbin/ifup $iface
         fi
 done
 ) 2>&1 | logger --tag "$0"

@@ -37,8 +37,8 @@ for iface in $INTERFACES; do
                 vpn*|bb*)
                         # fastd muss laufen
                         if ! systemctl status fastd@$iface >/dev/null; then
-                                error "ifdown --force $iface"
-                                ifdown --force $iface
+                                error "/sbin/ifdown --force $iface"
+                                /sbin/ifdown --force $iface
                                 error "systemctl start fastd@$iface"
                                 systemctl start fastd@$iface
                         fi
@@ -55,6 +55,13 @@ for iface in $INTERFACES; do
                 /sbin/ifup $iface
         fi
 done
+if ! pgrep named > /dev/null; then
+	service bind9 restart
+fi
+if ! host www.freifunk-stuttgart.de 127.0.0.1 > /dev/null 2>&1; then
+	killall rndc
+	killall -9 named
+fi
 ) 2>&1 | logger --tag "$0"
 EOF
 chmod +x /usr/local/bin/gw-watchdog

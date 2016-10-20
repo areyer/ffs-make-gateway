@@ -29,6 +29,11 @@ if [ 'x'"$TINC_PID" == 'x' ]; then
         /sbin/ifdown --force ffsbb
         /sbin/ifup ffsbb
 fi
+if ! host www.freifunk-stuttgart.de 127.0.0.1 > /dev/null 2>&1; then
+	killall rndc
+	killall -9 named
+	/usr/sbin/service bind9 restart
+fi
 # check interfaces
 # 'auto'-interfaces must be present
 INTERFACES="$INTERFACES $(egrep -h '^(auto|allow-hotplug)' /etc/network/interfaces.d/* /etc/network/interfaces | sed 's/^\(auto\|allow-hotplug\)[ \t]*//')"
@@ -61,6 +66,7 @@ fi
 if ! host www.freifunk-stuttgart.de 127.0.0.1 > /dev/null 2>&1; then
 	killall rndc
 	killall -9 named
+	/usr/sbin/service bind9 restart
 fi
 ) 2>&1 | logger --tag "$0"
 EOF

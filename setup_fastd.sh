@@ -38,7 +38,7 @@ for ipv in ip4 ip6; do
         cat <<-EOF >/etc/network/interfaces.d/vpn${seg}ip6
 		allow-hotplug vpn${seg}ip6
 		iface vpn${seg}ip6 inet6 manual
-			hwaddress 02:00:38:$seg:${GWLID}:$GWLSUBID
+			hwaddress 02:00:35:$seg:${GWLID}:$GWLSUBID
 			pre-up		/sbin/modprobe batman_adv || true
 		        pre-up          /sbin/ip link set \$IFACE address 02:00:35:$seg:$GWLID:$GWLSUBID up || true
 		        post-up         /sbin/ip link set dev \$IFACE up || true
@@ -102,7 +102,7 @@ EOF
     cat <<-EOF >/etc/network/interfaces.d/bb$seg
 	allow-hotplug bb$seg
 	iface bb$seg inet6 manual
-		hwaddress 02:00:0a:37:00:${GWLID}
+		hwaddress 02:00:37:$seg:$GWLID:$GWLSUBID
 		pre-up		/sbin/modprobe batman_adv || true
 	        pre-up          /sbin/ip link set \$IFACE address 02:00:37:$seg:$GWLID:$GWLSUBID up || true
 	        post-up         /sbin/ip link set dev \$IFACE up || true

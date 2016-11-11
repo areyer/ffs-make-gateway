@@ -6,7 +6,7 @@ if [ ! -d FfsConfigGenerator ]; then
 else
   cd FfsConfigGenerator
   git checkout -- config.json
-  git pull
+  git pull origin develop
 fi
 python -c '
 import json, sys

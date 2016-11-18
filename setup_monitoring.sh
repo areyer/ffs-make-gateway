@@ -72,3 +72,17 @@ fi
 EOF
 chmod +x /usr/local/bin/gw-watchdog
 ensureline "* * * * * root /usr/local/bin/gw-watchdog" /etc/cron.d/gw-watchdog
+apt-get -y install munin-node jq
+ensureline "allow ^10\.191\.255\.241$" /etc/munin/munin-node.conf
+ensureline "allow ^10\.191\.255\.242$" /etc/munin/munin-node.conf
+ensureline "allow ^10\.191\.255\.243$" /etc/munin/munin-node.conf
+cat <<'EOF' >/etc/munin/plugin-conf.d/freifunk
+[fastdall]
+user root
+EOF
+wget http://gw08.albi.info/dl/status.pl -O/usr/local/bin/status.pl; chmod +x /usr/local/bin/status.pl
+wget http://gw08.albi.info/dl/dhcp-clients -O/usr/share/munin/plugins/dhcp-clients; chmod +x /usr/share/munin/plugins/dhcp-clients
+wget http://gw08.albi.info/dl/fastdall -O/usr/share/munin/plugins/fastdall; chmod +x /usr/share/munin/plugins/fastdall
+[ ! -e /etc/munin/plugins/dhcp-clients ] && ln -s /usr/share/munin/plugins/dhcp-clients /etc/munin/plugins/dhcp-clients
+[ ! -e /usr/share/munin/plugins/fastdall ] && ln -s /usr/share/munin/plugins/fastdall /etc/munin/plugins/fastdall
+service munin-node restart

@@ -34,6 +34,12 @@ setup_firewall() {
     if [ ! -e /etc/firewall.lihas.d/interface-bat00 ]; then
       ln -s /etc/firewall.lihas.d/interface-br00 /etc/firewall.lihas.d/interface-bat00
     fi
+    if [ ! -e /etc/firewall.lihas.d/interface-ffsbb ]; then
+      ln -s /etc/firewall.lihas.d/interface-br00 /etc/firewall.lihas.d/interface-ffsbb
+    fi
+    if [ ! -e /etc/firewall.lihas.d/interface-bat0$i ]; then
+      ln -s /etc/firewall.lihas.d/interface-br00 /etc/firewall.lihas.d/interface-ffsbb
+    fi
     ensureline 172.21.0.0/16 /etc/firewall.lihas.d/interface-br00/network
     ensureline 10.190.0.0/15 /etc/firewall.lihas.d/interface-br00/network
     ensureline dhcpd /etc/firewall.lihas.d/interface-br00/mark

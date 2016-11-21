@@ -36,6 +36,7 @@ iface bat00 inet6 manual
         post-up         /usr/sbin/batctl -m \$IFACE it 10000 || true
         post-up         /usr/sbin/batctl -m \$IFACE vm server || true
         post-up         /usr/sbin/batctl -m \$IFACE gw server  50mbit/50mbit || true
+        post-up         echo 60 > /sys/devices/virtual/net/$IFACE/mesh/hop_penalty || true
         pre-down        /sbin/brctl delif br00 \$IFACE || true
 	post-up         /usr/sbin/service alfred@00 start || true
 	pre-down        /usr/sbin/service alfred@00 stop || true
